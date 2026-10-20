@@ -86,6 +86,9 @@ foreground app and, the moment LG's home appears, opens the launcher on top. LG'
 
 - **Press Home twice** within three seconds, or pick **LG** at the top of the launcher, to stay on
   LG's home, for its menus.
+- **Home while already on the launcher**: LG's home still flashes (webOS handles the key), but the
+  launcher comes back exactly as it was, focus included, without replaying its entrance: hidden
+  for under 1.5 s means a bounce, not a return from an app.
 - **Power on**: from standby the service is still running. From a cold start (the TV unplugged), a
   persistent Activity Manager activity starts it again, and it opens the launcher over whatever the
   TV picked (an input, Live TV, LG's home), but not over an app that a remote button such as

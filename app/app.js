@@ -956,13 +956,20 @@
   }
 
   /** Back from another app (or opened again from the shortcut): replay the entrance, keep the tile. */
-  var lastResume = 0;
+  var lastResume = 0, hiddenAt = 0;
+  var BOUNCE_MS = 1500;   // hidden for less than this: a Home press bounced off LG's home, nothing else
 
   function resume() {
     // Coming back, webOS sends visibilitychange then webOSRelaunch ~25 ms apart: act once.
     var now = Date.now();
     if (now - lastResume < 500) return;
     lastResume = now;
+    // Home pressed while already here: LG's home flashes and the service brings the launcher back
+    // within ~0.3 s. Nothing happened as far as the user is concerned, so nothing replays and focus
+    // stays put (a second press soon after still leaves LG's home up, in the service).
+    var bounced = hiddenAt && now - hiddenAt < BOUNCE_MS;
+    hiddenAt = 0;
+    if (bounced) return;
     startHomeWatch();
     watchApps();
     watchContext();
@@ -980,6 +987,7 @@
 
   /** Behind another app: no clock ticks, and the sound engine's audio context is closed. */
   function pause() {
+    hiddenAt = Date.now();
     clearInterval(clockTimer);
     clockTimer = null;
     soundsOff();
