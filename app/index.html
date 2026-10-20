@@ -13,9 +13,6 @@
   <!-- Below the dock the glow dims, as tvOS fades its top shelf. -->
   <div id="dim"></div>
 
-  <!-- Top shelf: the focused dock app's name, above the dock. -->
-  <div id="hero"></div>
-
   <!-- tvOS-style status bar, top right: round glass buttons, then the time. -->
   <header>
     <div id="topButtons">
@@ -42,6 +39,7 @@
   <!-- Everything below the header scrolls together. -->
   <div id="viewport">
     <div id="stage">
+      <div id="dockBand"></div>
       <div id="shadow"></div>
       <div id="tiles"></div>
     </div>

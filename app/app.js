@@ -15,9 +15,10 @@
   var COLUMNS = Math.max(1, CONFIG.columns || 4);
   var TILE_W = 380, TILE_H = 228;   // tvOS icons are 5:3 (400x240 pt)
   var CELL_W = (1920 - 2 * 112) / COLUMNS;
-  var ROW_PITCH = 318;
+  var ROW_PITCH = 284;           // no names under the icons: rows sit closer
   var DOCK_TOP = 690;           // tile top of the dock row: next row peeks in at the bottom
-  var DOCK_GAP = 36;            // extra space below the dock
+  var DOCK_GAP = 40;            // extra space below the dock
+  var BAND_PAD = 44;            // dock shelf around its icons: room for a grown one (x1.12)
   var FOCUS_SCALE = 1.12;       // style.css draws cards at this size
   var VIEW_TOP = 80, VIEW_BOTTOM = 1060;    // area grid rows scroll into (the header hides below the dock)
 
@@ -27,7 +28,7 @@
   var ICON_LIVETV = 'M21,6h-7.59l3.29,-3.29L16,2l-4,4l-4,-4l-0.71,0.71L10.59,6H3c-1.1,0 -2,0.89 -2,2v12c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.89 2,-2V8C23,6.89 22.1,6 21,6zM21,20H3V8h18V20zM9,10v8l7,-4L9,10z';
 
   var $ = function (id) { return document.getElementById(id); };
-  var stage = $('stage'), tilesEl = $('tiles'), shadow = $('shadow'), hero = $('hero');
+  var stage = $('stage'), tilesEl = $('tiles'), shadow = $('shadow');
   var ambients = [$('ambientA'), $('ambientB')], ambientFront = 0, ambientColor = null;
   var pills = [$('btnInputs'), $('btnWifi'), $('btnSettings'), $('btnLgHome')];
   var panel = $('inputsPanel');
@@ -35,7 +36,7 @@
   var items = [];               // {app, el, color}
   var zone = 'grid';            // 'grid' | 'top' | 'inputs'
   var focused = 0, pillFocus = 0, inputFocus = 0, inputRows = [];
-  var offset = 0, heroShown = false;
+  var offset = 0;
   var lastDock = 0;             // the dock tile focus returns to from the rows below
   var editing = null;           // {item, snapshot} while a tile is being moved
   var headerBottom = null;
@@ -238,10 +239,6 @@
       sheen.className = 'sheen';
       card.appendChild(sheen);
       el.appendChild(card);
-      var name = document.createElement('div');
-      name.className = 'name';
-      name.textContent = app.title;
-      el.appendChild(name);
       el.addEventListener('mouseover', function () {
         if (zone !== 'inputs' && !editing) focusTile(items.indexOf(item));
       });
@@ -260,8 +257,15 @@
     items.forEach(function (it, i) {
       it.el.style.left = tileLeft(i) + 'px';
       it.el.style.top = tileTop(i) + 'px';
-      it.el.classList.toggle('dock', rowOf(i) === 0);   // the dock has no labels: the top shelf names it
     });
+
+    var band = $('dockBand');
+    var n = Math.min(COLUMNS, items.length);
+    band.style.display = n ? 'block' : 'none';
+    band.style.left = (tileLeft(0) - BAND_PAD) + 'px';
+    band.style.top = (DOCK_TOP - BAND_PAD) + 'px';
+    band.style.width = ((n - 1) * CELL_W + TILE_W + 2 * BAND_PAD) + 'px';
+    band.style.height = (TILE_H + 2 * BAND_PAD) + 'px';
   }
 
   function animateIn() {
@@ -408,8 +412,8 @@
     if (row === 0) {
       offset = 0;
     } else {
-      // Scroll just enough so the whole grown tile and the name below it are visible.
-      if (top - offset + TILE_H + 70 > VIEW_BOTTOM) offset = top + TILE_H + 70 - VIEW_BOTTOM;
+      // Scroll just enough so the whole grown tile and its shadow are visible.
+      if (top - offset + TILE_H + 44 > VIEW_BOTTOM) offset = top + TILE_H + 44 - VIEW_BOTTOM;
       if (top - offset - 24 < VIEW_TOP) offset = top - 24 - VIEW_TOP;
     }
     stage.style.transform = 'translateY(' + (-offset) + 'px)';
@@ -419,12 +423,9 @@
       var header = document.querySelector('header');
       headerBottom = header.offsetTop + header.offsetHeight;
     }
-    document.body.classList.toggle('scrolled', DOCK_TOP - 28 - offset < headerBottom + 24);
+    document.body.classList.toggle('scrolled', DOCK_TOP - BAND_PAD - offset < headerBottom + 24);
 
     showShadow(i);
-
-    if (row === 0) showHero(items[i]);
-    else hideHero();
     setAmbient(items[i].color);   // the glow follows the focused tile in every row
   }
 
@@ -444,37 +445,6 @@
 
   function hideShadow() {
     shadow.style.opacity = '0';
-  }
-
-  function showHero(item) {
-    var label = item.app.title;
-    hero.style.top = (DOCK_TOP - 28 - 52 - 96) + 'px';
-    if (!heroShown) {
-      hero.textContent = label;
-      hero.style.transform = 'none';
-      hero.style.opacity = '1';
-      heroShown = true;
-    } else if (hero.textContent !== label) {
-      hero.style.opacity = '0';
-      hero.style.transform = 'translateX(-24px)';
-      clearTimeout(hero.swap);
-      hero.swap = setTimeout(function () {
-        hero.textContent = label;
-        hero.style.transition = 'none';
-        hero.style.transform = 'translateX(24px)';
-        hero.offsetWidth;
-        hero.style.transition = '';
-        hero.style.transform = 'none';
-        hero.style.opacity = '1';
-      }, 120);
-    }
-    setAmbient(item.color);
-  }
-
-  function hideHero() {
-    if (!heroShown) return;
-    heroShown = false;
-    hero.style.opacity = '0';
   }
 
   /** Crossfades the glow to a new colour by swapping between two layers. */

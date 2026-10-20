@@ -110,8 +110,9 @@ background service (`./home-watch-mac.sh uninstall` removes it).
 
 Closer to an Apple TV than the original layout: 5:3 icons with ~16 px corners, and focus is the
 icon itself growing (x1.12) on a spring over a soft shadow, with no frame. It tips the way focus
-came from and a highlight sweeps across it (`tilt: false` in `config.js` turns that off). The
-status bar is small and top right: round glass buttons (Inputs, Wi-Fi, Settings, LG), named under
+came from and a highlight sweeps across it (`tilt: false` in `config.js` turns that off). Icons
+carry no names, and the dock is a glass shelf (a faint tint and a bright top edge, no blur), wide
+enough for a grown icon. The status bar is small and top right: round glass buttons (Inputs, Wi-Fi, Settings, LG), named under
 the focused one, then the time. Going below the dock dims the glow, and coming back up returns to
 the dock tile last left. Inter stands in for SF Pro. Measured on a C4: 60 fps on the dock and in
 the status bar, about 51 MB when the launcher opens.
@@ -150,7 +151,7 @@ builds those tiles from logos on Wikimedia Commons: add a line for a new app, ru
 `./install.sh`.
 
 **Resolution and speed**: the launcher draws at 1920x1080 and the TV scales it to the panel, as
-LG's own home does. Tiles, the focus shadow and the title are GPU layers (tiles drawn at their
+LG's own home does. Tiles and the focus shadow are GPU layers (tiles drawn at their
 focused size, so they stay sharp) and the colour glow is drawn at a quarter size, so moving around
 redraws almost nothing. Behind another app the launcher stops its clock and closes its audio
 context. Measured on a C4: 60 fps along the dock with no late frame, about 44 MB and under half a second
