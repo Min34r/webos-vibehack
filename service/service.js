@@ -259,7 +259,10 @@ function refreshWeather(where) {
         '&current=temperature_2m,weather_code,is_day&daily=sunrise,sunset&forecast_days=1&timezone=auto' +
         '&timeformat=unixtime', function (err, d) {
       if (err || !d || !d.current) return failed(err ? err.message : 'no data');
-      if (d.daily && d.daily.sunrise && d.daily.sunset) sun = { rise: d.daily.sunrise[0], set: d.daily.sunset[0] };
+      if (d.daily && d.daily.sunrise && d.daily.sunset) {
+        sun = { rise: d.daily.sunrise[0], set: d.daily.sunset[0] };
+        applyBrightness();
+      }
       weather = { place: place.name, temp: Math.round(d.current.temperature_2m), code: d.current.weather_code,
                   day: d.current.is_day === 1, at: new Date().toISOString() };
       log('weather: ' + weather.temp + ' deg, code ' + weather.code + ', ' + place.name);
@@ -289,6 +292,7 @@ var goveeOn = null;       // what was last sent successfully
 var lightAuto = true;     // brightness follows day and night; a level picked in the launcher holds until the TV is off
 var lightLevel = null;    // that picked level, in %
 var lightSent = null;     // the brightness last sent successfully
+var lightPending = null;  // the brightness on its way: power, time zone and sun can all ask at once
 
 /** Sends one capability to the light; done(ok) after Govee answers. */
 function goveeCommand(what, capability, done) {
@@ -331,7 +335,7 @@ function goveeSwitch(on, retry) {
 // night is 21:00 to 7:00 at the launcher's UTC offset. Only brightness changes, never the colour
 // temperature, which would shift how the picture's colours read.
 var sun = null;           // {rise, set} in Unix seconds, for one day: later days repeat it
-var tzOffsetMin = 0;      // the launcher's getTimezoneOffset()
+var tzOffsetMin = null;   // the launcher's getTimezoneOffset(); null until it has said
 
 function isNight() {
   var now = Date.now() / 1000;
@@ -340,12 +344,14 @@ function isNight() {
     var phase = ((now - sun.rise) % 86400 + 86400) % 86400;
     return phase >= dayLength;
   }
-  var hour = new Date(Date.now() - tzOffsetMin * 60000).getUTCHours();
+  var hour = new Date(Date.now() - (tzOffsetMin || 0) * 60000).getUTCHours();
   return hour >= 21 || hour < 7;
 }
 
+/** The brightness wanted now, or null while day and night can't be told yet (just after a cold boot). */
 function targetBrightness() {
   if (!lightAuto && lightLevel) return lightLevel;
+  if (!sun && tzOffsetMin === null) return null;   // the launcher's first call brings the time zone and the sun
   return isNight() ? (govee.nightBrightness || 35) : (govee.dayBrightness || 75);
 }
 
@@ -353,17 +359,21 @@ function targetBrightness() {
 function applyBrightness() {
   if (!govee || goveeOn !== true) return;
   var want = targetBrightness();
-  if (want === lightSent) return;
+  if (want === null || want === lightSent || want === lightPending) return;
+  lightPending = want;
   var auto = lightAuto;
   goveeCommand('brightness ' + want + '%' + (auto ? (isNight() ? ' (night)' : ' (day)') : ''),
     { type: 'devices.capabilities.range', instance: 'brightness', value: want }, function (ok) {
+      lightPending = null;
       if (ok) lightSent = want;
       contextChanged();
+      applyBrightness();   // something else may have been asked meanwhile
     });
 }
 
 function lightState() {
-  return govee ? { on: goveeOn === true, auto: lightAuto, level: lightLevel, brightness: lightSent, night: isNight() } : null;
+  return govee ? { on: goveeOn === true, auto: lightAuto, level: lightLevel, brightness: lightSent,
+                   night: sun || tzOffsetMin !== null ? isNight() : null } : null;
 }
 
 /** The TV's power state: on only while Active and not on its way to standby or off. */
@@ -525,7 +535,10 @@ if (Service) {
   });
   service.register('context', function (message) {
     if (message.isSubscription) contextSubs.push(message);
-    if (typeof message.payload.tzOffset === 'number') tzOffsetMin = message.payload.tzOffset;
+    if (typeof message.payload.tzOffset === 'number') {
+      tzOffsetMin = message.payload.tzOffset;
+      applyBrightness();
+    }
     refreshWeather(message.payload.weather);
     pushContext(message);
   }, function (message) {
