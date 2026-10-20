@@ -72,10 +72,13 @@ body.no-drift #ambience { animation: none; transform: scale(1.08); }
   pointer-events: none;
 }
 
-/* Fine noise (a tile made in app.js) at a whisper: dark gradients otherwise show steps. */
+/* Fine noise at a whisper: dark gradients otherwise show steps. grain.png is greys within +/-40 of
+   the middle, so at 3% light varies by about one level. (Made once: encoding it in JavaScript took
+   ~20 ms of every startup.) */
 #grain {
   position: absolute;
   inset: 0;
+  background-image: url(grain.png);
   opacity: 0.03;
   pointer-events: none;
 }

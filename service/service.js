@@ -262,6 +262,7 @@ function refreshWeather(where) {
       if (d.daily && d.daily.sunrise && d.daily.sunset) {
         sun = { rise: d.daily.sunrise[0], set: d.daily.sunset[0] };
         applyBrightness();
+        if (govee) scheduleDayNight();
       }
       weather = { place: place.name, temp: Math.round(d.current.temperature_2m), code: d.current.weather_code,
                   day: d.current.is_day === 1, at: new Date().toISOString() };
@@ -369,6 +370,29 @@ function applyBrightness() {
       contextChanged();
       applyBrightness();   // something else may have been asked meanwhile
     });
+}
+
+/**
+ * Wakes up once at the next sunrise or sunset (or 7:00 / 21:00) to switch brightness, instead of
+ * checking every minute. Timers stop in standby, which is fine: waking up re-applies anyway.
+ */
+var dayNightTimer = null;
+
+function scheduleDayNight() {
+  clearTimeout(dayNightTimer);
+  var now = Date.now() / 1000, next;
+  if (sun) {
+    var phase = ((now - sun.rise) % 86400 + 86400) % 86400, dayLength = sun.set - sun.rise;
+    next = phase < dayLength ? dayLength - phase : 86400 - phase;
+  } else {
+    var local = new Date(Date.now() - (tzOffsetMin || 0) * 60000);
+    var hours = local.getUTCHours() + local.getUTCMinutes() / 60 + local.getUTCSeconds() / 3600;
+    next = ((hours < 7 ? 7 - hours : hours < 21 ? 21 - hours : 31 - hours) * 3600);
+  }
+  dayNightTimer = setTimeout(function () {
+    applyBrightness();
+    scheduleDayNight();
+  }, Math.min(next + 5, 6 * 3600) * 1000);   // re-checked at least every 6 h, should the clock jump
 }
 
 function lightState() {
@@ -538,6 +562,7 @@ if (Service) {
     if (typeof message.payload.tzOffset === 'number') {
       tzOffsetMin = message.payload.tzOffset;
       applyBrightness();
+      if (govee) scheduleDayNight();
     }
     refreshWeather(message.payload.weather);
     pushContext(message);
@@ -602,7 +627,7 @@ if (Service) {
   watch();
   keepDevMode();
   setInterval(keepDevMode, 3600 * 1000);
-  if (govee) setInterval(applyBrightness, 60 * 1000);   // day turning to night (a no-op otherwise)
+  if (govee) scheduleDayNight();
 } else {
   watch();   // run by hand: node service.js
 }

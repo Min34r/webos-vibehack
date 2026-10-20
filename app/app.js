@@ -534,24 +534,6 @@
     });
   }
 
-  /**
-   * A small tile of grey noise for #grain, made once (cheaper than shipping an image). Greys stay
-   * near the middle (+/-40) and #grain is 3% opaque: about one level of light either way, enough to
-   * break gradient steps without showing (full-range noise at 5% read as visible grain).
-   */
-  function makeGrain() {
-    var c = document.createElement('canvas');
-    c.width = c.height = 128;
-    var g = c.getContext('2d'), img = g.createImageData(128, 128);
-    for (var i = 0; i < img.data.length; i += 4) {
-      var v = 88 + Math.random() * 80;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
-      img.data[i + 3] = 255;
-    }
-    g.putImageData(img, 0, 0);
-    $('grain').style.backgroundImage = 'url(' + c.toDataURL() + ')';
-  }
-
   /** Crossfades the glow to a new colour by swapping between two layers. */
   function setAmbient(color) {
     if (!color) return;
@@ -691,9 +673,14 @@
     return '<svg viewBox="0 0 24 24">' + body + '</svg>';
   }
 
+  var weatherKey = '';
+
   function renderWeather(w) {
     var el = $('weather');
-    if (!w || !CONFIG.weather) { el.classList.remove('shown'); return; }
+    if (!w || !CONFIG.weather) { el.classList.remove('shown'); weatherKey = ''; return; }
+    var key = [w.temp, w.code, w.day, w.place].join('|');
+    if (key === weatherKey) return;   // the service pushes for other reasons too
+    weatherKey = key;
     var label = 'Météo', kind = 'cloud';
     WEATHER.forEach(function (row) { if (row[0].indexOf(w.code) >= 0) { label = row[1]; kind = row[2]; } });
     if (kind === 'clear' && !w.day) label = 'Dégagé';
@@ -727,9 +714,10 @@
         }
         context.devices = res.devices || [];
         if (res.weather) context.weather = res.weather;
+        var lightChanged = JSON.stringify(res.light || null) !== JSON.stringify(context.light);
         context.light = res.light || null;
         refreshPills();
-        if (zone === 'inputs' && pills[menuPill] === $('btnLight')) showLightMenu(inputFocus);
+        if (lightChanged && zone === 'inputs' && pills[menuPill] === $('btnLight')) showLightMenu(inputFocus);
         renderShelf();
         renderWeather(context.weather);
       });
@@ -745,9 +733,15 @@
 
   // ---- status bar ----------------------------------------------------------------------------
 
+  /** Sets the time, and wakes up again right after the next minute turns (not every few seconds). */
   function updateClock() {
     var now = new Date(), m = now.getMinutes();
-    $('clock').textContent = now.getHours() + ':' + (m < 10 ? '0' : '') + m;
+    var text = now.getHours() + ':' + (m < 10 ? '0' : '') + m, clock = $('clock');
+    if (clock.textContent !== text) clock.textContent = text;
+    if (clockTimer !== null) {
+      clearTimeout(clockTimer);
+      clockTimer = setTimeout(updateClock, 60500 - now.getSeconds() * 1000 - now.getMilliseconds());
+    }
   }
 
   function activatePill(i) {
@@ -1052,7 +1046,7 @@
   /** Behind another app: no clock or weather ticks, and the sound engine's audio context is closed. */
   function pause() {
     hiddenAt = Date.now();
-    clearInterval(clockTimer);
+    clearTimeout(clockTimer);
     clearInterval(weatherTimer);
     clockTimer = weatherTimer = null;
     soundsOff();
@@ -1060,7 +1054,10 @@
 
   function unpause() {
     soundsOn();
-    if (!clockTimer) clockTimer = setInterval(updateClock, 10000);
+    if (clockTimer === null) {
+      clockTimer = 0;   // armed: updateClock schedules itself on the minute
+      updateClock();
+    }
     if (!weatherTimer) weatherTimer = setInterval(pokeWeather, 5 * 60 * 1000);
   }
 
@@ -1072,7 +1069,6 @@
 
   document.body.classList.toggle('no-tilt', CONFIG.tilt === false);
   document.body.classList.toggle('no-drift', CONFIG.drift !== true);
-  makeGrain();
   applyTitles();
   build();
   updateClock();
