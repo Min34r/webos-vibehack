@@ -83,27 +83,28 @@
 
   // Feedback in the spirit of tvOS's tick, synthesised by spanda (vendor/spanda.js), no audio files.
   // The engine opens its audio context on the first sound, and is dropped behind other apps.
-  var VOLUME = CONFIG.sounds == null ? 0.5 : CONFIG.sounds;
+  var VOLUME = CONFIG.sounds == null ? 0.3 : CONFIG.sounds;
   var sfx = null;
 
-  // "glass", the default: a light, clear tap. A sine body around 620 Hz with no sub-octave (spanda's
-  // "lush" sits at 104 Hz plus a 52 Hz sub: on TV speakers, a knock behind your head), open to
-  // 2.6 kHz, a soft attack, a short tail, a faint high ping and a little room. config.js soundStyle
-  // can pick spanda's own profiles instead: 'tactile', 'crisp' or 'lush'.
+  // "glass", the default: a soft tap between spanda's "lush" (104 Hz plus a 52 Hz sub under a 520 Hz
+  // low-pass: on TV speakers, a knock behind your head) and a bright 620 Hz tap (too clear). A sine
+  // body around 330 Hz with a little sub-octave, low-passed at 1.4 kHz, a soft attack, a short
+  // tail, a barely-there ping and a little room. config.js soundStyle can pick spanda's own
+  // profiles instead: 'tactile', 'crisp' or 'lush'.
   var GLASS = {
-    baseFrequency: 620,
-    decayMs: 55,
-    attackMs: 2,
+    baseFrequency: 330,
+    decayMs: 60,
+    attackMs: 4,
     waveform: 'sine',
-    bodyLowpass: 2600,
-    transient: { amount: 0.18, frequency: 3200, type: 'bandpass', durationMs: 4 },
-    sub: 0,
+    bodyLowpass: 1400,
+    transient: { amount: 0.12, frequency: 1800, type: 'lowpass', durationMs: 6 },
+    sub: 0.12,
     click: 0,
-    ping: 0.22,
-    pingFrequency: 2400,
+    ping: 0.08,
+    pingFrequency: 1800,
     pitchVariationPercent: 2,
     volumeVariationPercent: 6,
-    reverb: 0.2,
+    reverb: 0.25,
     layerSpreadMs: 2,
     completionStyle: 'crisp'
   };

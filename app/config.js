@@ -36,7 +36,7 @@ window.CONFIG = {
   columns: 4,
 
   // Interface sounds (remote keys only), from 0 (off) to 1.
-  sounds: 0.5,
+  sounds: 0.3,
 
   // Their character: 'glass' (light and clear, the default), or spanda's 'tactile', 'crisp' or
   // 'lush' (low and round).
