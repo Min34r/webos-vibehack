@@ -227,9 +227,11 @@ function noteForeground(app) {
 }
 
 // Weather from Open-Meteo (free, no account), which updates its current values every 15 minutes:
-// fetched at most that often, and only while the launcher is on screen (it asks every 5 minutes),
-// so nothing goes out while the TV isn't used. Only the place's coordinates are sent.
-var WEATHER_EVERY_MS = 15 * 60 * 1000;
+// fetched about that often, and only while the launcher is on screen (it asks every 5 minutes),
+// so nothing goes out while the TV isn't used. Only the place's coordinates are sent. 14 minutes,
+// not 15: a launcher timer firing a little early (it restarts whenever the screen saver hides the
+// page) must still refresh, or readings wait for the next ask, ~20 minutes.
+var WEATHER_EVERY_MS = 14 * 60 * 1000;
 var weatherKey = '', weatherAt = 0, places = {};
 
 function getJSON(url, done) {
