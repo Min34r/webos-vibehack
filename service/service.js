@@ -275,6 +275,50 @@ function refreshWeather(where) {
     });
 }
 
+// ---- Govee TV backlight (optional) -------------------------------------------------------------
+// With govee.json next to this file (install.sh copies it from the repo root; tools/govee_setup.py
+// writes it), the TV's backlight follows the TV: on when it's on, off when it goes to standby or
+// turns its screen off. Through Govee's cloud API: the TV Backlight 3 Lite (H6097) has no local
+// LAN control. A command goes out only when the state changes.
+
+var govee = null;
+try { govee = require('./govee.json'); } catch (e) { /* not set up: nothing to do */ }
+var goveeOn = null;   // what was last sent successfully
+
+function goveeSwitch(on, retry) {
+  if (!govee || on === goveeOn) return;
+  goveeOn = on;
+  var body = JSON.stringify({ requestId: String(Date.now()), payload: { sku: govee.sku, device: govee.device,
+    capability: { type: 'devices.capabilities.on_off', instance: 'powerSwitch', value: on ? 1 : 0 } } });
+  var started = Date.now();
+  var failed = function (why) {
+    log('govee ' + (on ? 'on' : 'off') + ' failed: ' + why);
+    goveeOn = null;
+    if (retry) setTimeout(function () { goveeSwitch(on, false); }, 5000);
+  };
+  var req = https.request({ host: 'openapi.api.govee.com', path: '/router/api/v1/device/control', method: 'POST',
+    headers: { 'Govee-API-Key': govee.apiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+  }, function (res) {
+    var out = '';
+    res.on('data', function (d) { out += d; });
+    res.on('end', function () {
+      if (res.statusCode !== 200 || !/"code":\s*200/.test(out)) return failed(res.statusCode + ' ' + out.slice(0, 120));
+      log('govee ' + (on ? 'on' : 'off') + ' (' + (Date.now() - started) + ' ms)');
+    });
+  });
+  req.setTimeout(8000, function () { req.destroy(new Error('timed out')); });
+  req.on('error', function (e) { failed(e.message); });
+  req.end(body);
+}
+
+/** The TV's power state: on only while Active and not on its way to standby or off. */
+function onPower(p) {
+  var state = p.state || '', processing = p.processing || '';
+  var on = state === 'Active' && !/standby|suspend|off/i.test(processing);
+  log('power: ' + state + (processing ? ' (' + processing + ')' : ''));
+  goveeSwitch(on, on);   // switching off, there's no time for a retry before standby
+}
+
 var running = false;
 var connected = false;
 var bootLaunchDone = false;
@@ -300,6 +344,7 @@ function watch() {
       ws.send({ type: 'subscribe', id: 'fg', uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo', payload: {} });
       ws.send({ type: 'subscribe', id: 'lp', uri: 'ssap://com.webos.applicationManager/listLaunchPoints', payload: {} });
       ws.send({ type: 'subscribe', id: 'inputs', uri: 'ssap://tv/getExternalInputList', payload: {} });
+      if (govee) ws.send({ type: 'subscribe', id: 'power', uri: 'ssap://com.webos.service.tvpower/power/getPowerState', payload: {} });
       bootCheck = !bootLaunchDone && os.uptime() < BOOT_S;
       bootLaunchDone = true;
       return;
@@ -311,6 +356,7 @@ function watch() {
       return;
     }
     if ((msg.id === 'lp' || msg.id === 'lp-all') && msg.payload) return setApps(msg.payload.launchPoints || []);
+    if (msg.id === 'power' && msg.payload) return onPower(msg.payload);
     if (msg.id === 'inputs' && msg.payload && msg.payload.devices) {
       // A subscription: renamed inputs and devices switched on or off come through too.
       inputs = msg.payload.devices.filter(function (d) { return d.appId; })
@@ -432,7 +478,7 @@ if (Service) {
     var at = lastExtended();
     message.respond({ returnValue: true, connected: connected, apps: apps ? apps.length : null, weather: weather,
       devModeExtended: at ? new Date(at).toISOString() : null, uptime: Math.round(os.uptime()),
-      logFile: LOG_FILE, log: recent.slice(-60) });
+      govee: govee ? { sku: govee.sku, on: goveeOn } : null, logFile: LOG_FILE, log: recent.slice(-60) });
   });
   service.register('allowLgHome', function (message) {
     passUntil = Date.now() + ESCAPE_MS;

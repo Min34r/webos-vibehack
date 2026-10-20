@@ -27,6 +27,10 @@ if [ ! -f app/icon.png ]; then
   sips -s format png -z 130 130 assets/icon.jpg --out app/largeIcon.png >/dev/null
 fi
 
+# Optional: the Govee backlight follows the TV when govee.json exists (tools/govee_setup.py).
+# Readable by all in the package: the service runs as another user than the one owning its files.
+if [ -f govee.json ]; then install -m 644 govee.json service/govee.json; else rm -f service/govee.json; fi
+
 # The on-TV Home watcher (service/) reuses the key sync-apps.py just paired with.
 "$PY" -c "import json,sys; print(json.dumps({'key': json.load(open('.lgtv-key.json'))[sys.argv[1]]}))" \
   "$TV_HOST" > service/key.json

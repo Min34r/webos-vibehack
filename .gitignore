@@ -9,3 +9,5 @@ app/icon.png
 app/largeIcon.png
 service/key.json
 .DS_Store
+govee.json
+service/govee.json

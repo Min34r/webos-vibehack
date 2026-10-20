@@ -142,6 +142,21 @@ Above the dock, where tvOS shows an app's top shelf (webOS gives no access to ap
 
 From the dock, Up goes to that row, and Up again to the status bar.
 
+## Govee backlight (optional)
+
+A Govee light can follow the TV: on when the TV turns on, off when it goes to standby or turns
+its screen off. Tested with the TV Backlight 3 Lite (H6097), which has no local LAN control, so
+this goes through Govee's cloud API and needs a free API key (Govee Home app: Profile > Settings >
+About Us > Apply for API Key; it comes by email, check the spam folder). Then:
+
+```bash
+python3 tools/govee_setup.py YOUR-API-KEY H6097    # writes govee.json (git-ignored: it holds the key)
+TV_HOST=192.168.1.50 ./install.sh
+```
+
+The service subscribes to the TV's power state and sends a command only when it changes (about
+0.8 s per command); the log says what was sent. `rm govee.json && ./install.sh` turns it off.
+
 ## App list
 
 The service also subscribes to the TV's app list, which pushes a change only when an app is
@@ -223,6 +238,7 @@ For when you do land on it. Names vary a little by webOS version:
 | [`app/vendor/spanda.js`](app/vendor/spanda.js) | spanda, the interface sound synthesiser (MIT) |
 | [`service/`](service/) | Runs on the TV: the Home watcher, the app list and the Developer Mode keep-alive |
 | [`tools/make_logos.py`](tools/make_logos.py) | Builds `app/logos/` from Wikimedia Commons |
+| [`tools/govee_setup.py`](tools/govee_setup.py) | Writes `govee.json` for the optional Govee backlight sync |
 | [`install.sh`](install.sh) | Syncs your apps, packages and installs the launcher, and opens it |
 | [`sync-apps.py`](sync-apps.py) | Reads apps, icons and HDMI inputs from the TV into `app/apps.js` and `app/icons/` |
 | [`home-watch.py`](home-watch.py) | The Home watcher, for another always-on device |
