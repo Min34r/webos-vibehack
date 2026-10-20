@@ -2,8 +2,10 @@
 // remote-control service (ws://127.0.0.1:3000) and opens the launcher when LG's home appears.
 // The launcher starts it at launch; the keepAlive activity stops webOS from closing it when idle.
 // Press Home twice within ESCAPE_MS to stay on LG's home.
-// It also extends the Developer Mode session once a day, as the app's "Extend Session Time" does.
+// It also extends the Developer Mode session once a day, as the app's "Extend Session Time" does,
+// and keeps the launcher's app list current as apps are installed or removed.
 var net = require('net');
+var http = require('http');
 var https = require('https');
 var fs = require('fs');
 var crypto = require('crypto');
@@ -98,6 +100,72 @@ function connect(onOpen, onMessage, onClose) {
   return { send: function (obj) { frame(1, Buffer.from(JSON.stringify(obj))); }, close: close };
 }
 
+// ---- app list ------------------------------------------------------------------------------
+// webOS won't let the launcher list apps, but the remote-control service does, and pushes a change
+// when an app is installed or removed. Keep the list here and push it to the launcher only when it
+// changed: no polling, and icons are fetched only for apps the launcher has none for.
+
+var apps = null;        // [{id, title, iconColor, iconUrl}] of visible apps, null until known
+var appsKey = '';       // apps as JSON: an unchanged list isn't pushed again
+var inputs = null;      // [{appId, label}]
+var iconCache = {};     // icon URL -> data: URL
+var appSubs = [];       // the launcher's 'apps' subscriptions
+
+function setApps(points) {
+  var next = points.filter(function (p) { return !p.hidden; }).map(function (p) {
+    var large = String(p.largeIcon || '');
+    return { id: p.id, title: p.title, iconColor: p.iconColor || p.bgColor || '',
+             iconUrl: large.indexOf('http') === 0 ? large : p.icon };
+  });
+  var key = JSON.stringify(next);
+  if (key === appsKey) return;
+  appsKey = key;
+  apps = next;
+  log('apps: ' + apps.length);
+  var live = {};
+  apps.forEach(function (a) { live[a.iconUrl] = true; });
+  Object.keys(iconCache).forEach(function (url) { if (!live[url]) delete iconCache[url]; });
+  appSubs.forEach(pushApps);
+}
+
+function fetchIcon(url, done) {
+  if (iconCache[url] || !/^https?:/.test(url || '')) return done();
+  var lib = url.indexOf('https:') === 0 ? https : http;   // the TV serves icons over both
+  var req = lib.get(url, { rejectUnauthorized: false }, function (res) {   // the TV's own LG-CA certificate
+    var chunks = [];
+    res.on('data', function (d) { chunks.push(d); });
+    res.on('end', function () {
+      if (res.statusCode === 200) {
+        iconCache[url] = 'data:' + (res.headers['content-type'] || 'image/png') + ';base64,' +
+          Buffer.concat(chunks).toString('base64');
+      }
+      done();
+    });
+  });
+  req.setTimeout(10000, function () { req.destroy(new Error('timed out')); });
+  req.on('error', function (e) { log('icon failed:', url, e.message); done(); });
+}
+
+/** Sends the list to one launcher subscription, with icons for the apps it has none bundled for. */
+function pushApps(message) {
+  if (!apps) return;
+  var known = {};
+  (message.payload.known || []).forEach(function (id) { known[id] = true; });
+  var missing = apps.filter(function (a) { return !known[a.id]; });
+  var left = missing.length + 1;
+  var finish = function () {
+    if (--left) return;
+    message.respond({
+      returnValue: true, subscribed: true, inputs: inputs,
+      apps: apps.map(function (a) {
+        return { id: a.id, title: a.title, iconColor: a.iconColor, icon: known[a.id] ? null : iconCache[a.iconUrl] || null };
+      })
+    });
+  };
+  missing.forEach(function (a) { fetchIcon(a.iconUrl, finish); });
+  finish();
+}
+
 var running = false;
 var bootLaunchDone = false;
 var bootCheck = false;   // the next foreground report decides the cold-boot launch
@@ -119,11 +187,24 @@ function watch() {
       clientKey = msg.payload['client-key'];
       log('connected');
       ws.send({ type: 'subscribe', id: 'fg', uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo', payload: {} });
+      ws.send({ type: 'subscribe', id: 'lp', uri: 'ssap://com.webos.applicationManager/listLaunchPoints', payload: {} });
+      ws.send({ type: 'request', id: 'inputs', uri: 'ssap://tv/getExternalInputList', payload: {} });
       bootCheck = !bootLaunchDone && os.uptime() < BOOT_S;
       bootLaunchDone = true;
       return;
     }
     if (msg.type === 'error') { log('error:', msg.error); return; }
+    if (msg.id === 'lp' && msg.payload && !msg.payload.launchPoints) {
+      // A change (an app installed, removed or updated) comes alone: fetch the whole list again.
+      ws.send({ type: 'request', id: 'lp-all', uri: 'ssap://com.webos.applicationManager/listLaunchPoints', payload: {} });
+      return;
+    }
+    if ((msg.id === 'lp' || msg.id === 'lp-all') && msg.payload) return setApps(msg.payload.launchPoints || []);
+    if (msg.id === 'inputs' && msg.payload) {
+      inputs = (msg.payload.devices || []).filter(function (d) { return d.appId; })
+        .map(function (d) { return { appId: d.appId, label: d.label || d.id }; });
+      return;
+    }
     if (msg.id !== 'fg' || !msg.payload) return;
     var app = msg.payload.appId || '';
     if (bootCheck) {
@@ -199,6 +280,13 @@ if (Service) {
     watch();
     keepDevMode();
     message.respond({ returnValue: true, running: running });
+  });
+  service.register('apps', function (message) {
+    if (message.isSubscription) appSubs.push(message);
+    if (apps) pushApps(message);
+    else message.respond({ returnValue: true, subscribed: !!message.isSubscription });   // the list follows
+  }, function (message) {
+    appSubs.splice(appSubs.indexOf(message), 1);
   });
   service.register('allowLgHome', function (message) {
     passUntil = Date.now() + ESCAPE_MS;

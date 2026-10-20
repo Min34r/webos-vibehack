@@ -13,6 +13,7 @@ This fork of [OmkarK97/webos-vibehack](https://github.com/OmkarK97/webos-vibehac
 - **Home without another device**: the Home watcher runs on the TV itself, as a service inside the
   launcher's package, and starts on its own after a reboot, even from a cold start.
 - **No Developer Mode expiry**: the same service extends the Developer Mode session once a day.
+- **Apps sync on the TV**: apps you install or remove show up in the launcher by themselves.
 - **4K**: the launcher renders at 3840x2160, and tiles use vector logos instead of the TV's 130px icons.
 - **Sounds**: soft interface sounds on the remote's keys.
 - **An LG button**, a French interface and renamable tiles.
@@ -24,7 +25,7 @@ webOS is more locked down than Android TV, so three things work differently:
 | | Android TV | LG webOS |
 |---|---|---|
 | Install | ADB, no account | LG's **Developer Mode** app (free LG developer account) |
-| App list | read on the TV | read from your computer by `sync-apps.py` and bundled in; webOS won't let an app list installed apps |
+| App list | read on the TV | webOS won't let an app list installed apps: `sync-apps.py` bundles them in, then the service keeps the list current |
 | Home button | the launcher *is* Home | webOS always opens LG's home; a service on the TV switches straight back (0.1 to 0.2 s) |
 
 There's no debloat step: webOS has no ADB-style package disabling. Turn off LG's ads in the TV's
@@ -66,8 +67,9 @@ TV_HOST=192.168.1.50 ./install.sh
 
 The first run shows an "allow this device?" prompt on the TV: accept it. That pairing lets
 `sync-apps.py` read your apps and icons, and the Home service reuses it. `install.sh` then packages
-the app and its service, installs it and opens it. Run it again whenever you install or remove apps
-on the TV.
+the app and its service, installs it and opens it. Apps you install or remove later show up by
+themselves (see [App list](#app-list)); run it again after changing `config.js`, or to give a new
+app a vector logo.
 
 **4. A one-press shortcut**
 
@@ -97,6 +99,15 @@ Its log is on the TV, readable over the Developer Mode SSH (port 9922, user `pri
 [`home-watch.py`](home-watch.py) is the same watcher for another always-on device on the network,
 from before the service. On a Mac, `TV_HOST=192.168.1.50 ./home-watch-mac.sh` installs it as a
 background service (`./home-watch-mac.sh uninstall` removes it).
+
+## App list
+
+The service also subscribes to the TV's app list, which pushes a change only when an app is
+installed, removed or updated: nothing polls. The launcher opens at once with the list bundled by
+`install.sh`, then asks the service, and rebuilds the grid only when the two differ (an unchanged
+list costs nothing). Bundled logos and icons still win; the service fetches the TV's 130px icon
+only for an app installed since, until `tools/make_logos.py` gives it a logo. Measured on a C4:
+the service stays at about 25 MB and the launcher at about 45 MB, as before.
 
 ## Using it
 
@@ -156,7 +167,7 @@ For when you do land on it. Names vary a little by webOS version:
 | [`app/`](app/) | The launcher: `index.html`, `style.css`, `app.js`, `config.js`, `appinfo.json` |
 | [`app/logos/`](app/logos/) | Vector tiles that replace the TV's icons, built by `tools/make_logos.py` |
 | [`app/vendor/spanda.js`](app/vendor/spanda.js) | spanda, the interface sound synthesiser (MIT) |
-| [`service/`](service/) | The Home watcher and Developer Mode keep-alive, running on the TV |
+| [`service/`](service/) | Runs on the TV: the Home watcher, the app list and the Developer Mode keep-alive |
 | [`tools/make_logos.py`](tools/make_logos.py) | Builds `app/logos/` from Wikimedia Commons |
 | [`install.sh`](install.sh) | Syncs your apps, packages and installs the launcher, and opens it |
 | [`sync-apps.py`](sync-apps.py) | Reads apps, icons and HDMI inputs from the TV into `app/apps.js` and `app/icons/` |

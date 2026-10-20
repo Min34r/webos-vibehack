@@ -58,6 +58,7 @@
       };
       bridges.push(b);
       b.call(uri, JSON.stringify(params || {}));
+      return b;
     } catch (e) {
       if (cb) cb({ returnValue: false, errorText: String(e) });   // not on a TV (desktop preview)
     }
@@ -100,11 +101,64 @@
 
   // ---- apps ----------------------------------------------------------------------------------
 
-  /** config.js titles rename apps and inputs (HDMI inputs are both). */
+  /** config.js titles rename apps and inputs (HDMI inputs are both); tvTitle keeps the TV's name. */
   function applyTitles() {
     var titles = CONFIG.titles || {}, data = window.TV_APPS || {};
-    (data.apps || []).forEach(function (a) { if (titles[a.id]) a.title = titles[a.id]; });
+    (data.apps || []).forEach(function (a) {
+      a.tvTitle = a.tvTitle || a.title;
+      a.title = titles[a.id] || a.tvTitle;
+    });
     (data.inputs || []).forEach(function (i) { if (titles[i.appId]) i.label = titles[i.appId]; });
+  }
+
+  // ---- live app list -------------------------------------------------------------------------
+
+  // apps.js is the list install.sh saw. The service (service/) pushes the TV's list when it differs,
+  // so apps installed or removed since show up by themselves. Bundled icons and logos still win; the
+  // service only sends icons for apps installed since.
+  var bundledIcons = {};
+  ((window.TV_APPS && TV_APPS.apps) || []).forEach(function (a) { bundledIcons[a.id] = a.icon; });
+  var pendingApps = null;   // a list that arrived while a tile was being moved
+  var appsBridge = null;
+
+  function appsKey(list) {
+    return list.map(function (a) { return a.id + '|' + (a.tvTitle || a.title) + '|' + a.icon; }).join('\n');
+  }
+
+  /** (Re)subscribes: called on every resume, since a subscription dies with a restarted service. */
+  function watchApps() {
+    if (appsBridge) {
+      try { appsBridge.cancel(); } catch (e) { /* already gone */ }
+      bridges.splice(bridges.indexOf(appsBridge), 1);
+    }
+    appsBridge = luna('luna://com.gathin.tvhome.service/apps', { subscribe: true, known: Object.keys(bundledIcons) }, function (res) {
+      if (res.inputs) {
+        TV_APPS.inputs = res.inputs;
+        applyTitles();
+      }
+      if (!res.apps) return;
+      var next = [];
+      res.apps.forEach(function (a) {
+        var icon = bundledIcons[a.id] || a.icon;
+        if (icon) next.push({ id: a.id, title: a.title, iconColor: a.iconColor, icon: icon });   // no icon: skipped, as sync-apps.py does
+      });
+      if (appsKey(next) === appsKey(TV_APPS.apps)) return;
+      if (editing) pendingApps = next;
+      else setApps(next);
+    });
+  }
+
+  /** Swaps in a new app list without the entrance animation, keeping focus on the same app. */
+  function setApps(list) {
+    var id = items[focused] && items[focused].app.id;
+    TV_APPS.apps = list;
+    applyTitles();
+    build();
+    items.forEach(function (it) { it.el.classList.add('shown'); });
+    var at = 0;
+    items.forEach(function (it, i) { if (it.app.id === id) at = i; });
+    focused = at;
+    if (zone === 'grid') focusTile(at);
   }
 
   function orderedApps() {
@@ -567,6 +621,10 @@
     sound(keep ? 'drop' : 'back');
     focused = items.indexOf(it);
     focusTile(focused);
+    if (pendingApps) {
+      setApps(pendingApps);
+      pendingApps = null;
+    }
   }
 
   // ---- keys ----------------------------------------------------------------------------------
@@ -648,6 +706,7 @@
   /** Back from another app (or opened again from the shortcut): replay the entrance, keep the tile. */
   function resume() {
     startHomeWatch();
+    watchApps();
     if (editing) finishEdit(false);
     updateClock();
     if (zone === 'inputs') panel.classList.add('hidden');
@@ -666,6 +725,7 @@
   setInterval(updateClock, 10000);
   watchNetwork();
   startHomeWatch();
+  watchApps();
   animateIn();
   zone = 'none';
   focusTile(0);
