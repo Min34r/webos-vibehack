@@ -81,15 +81,37 @@
 
   // ---- sounds --------------------------------------------------------------------------------
 
-  // Soft, rounded feedback in the spirit of tvOS: spanda's "lush" profile (vendor/spanda.js), a low
-  // sine body with a sub-octave, a slow attack and a little room, synthesised with no audio files.
+  // Feedback in the spirit of tvOS's tick, synthesised by spanda (vendor/spanda.js), no audio files.
   // The engine opens its audio context on the first sound, and is dropped behind other apps.
   var VOLUME = CONFIG.sounds == null ? 0.5 : CONFIG.sounds;
   var sfx = null;
 
+  // "glass", the default: a light, clear tap. A sine body around 620 Hz with no sub-octave (spanda's
+  // "lush" sits at 104 Hz plus a 52 Hz sub: on TV speakers, a knock behind your head), open to
+  // 2.6 kHz, a soft attack, a short tail, a faint high ping and a little room. config.js soundStyle
+  // can pick spanda's own profiles instead: 'tactile', 'crisp' or 'lush'.
+  var GLASS = {
+    baseFrequency: 620,
+    decayMs: 55,
+    attackMs: 2,
+    waveform: 'sine',
+    bodyLowpass: 2600,
+    transient: { amount: 0.18, frequency: 3200, type: 'bandpass', durationMs: 4 },
+    sub: 0,
+    click: 0,
+    ping: 0.22,
+    pingFrequency: 2400,
+    pitchVariationPercent: 2,
+    volumeVariationPercent: 6,
+    reverb: 0.2,
+    layerSpreadMs: 2,
+    completionStyle: 'crisp'
+  };
+
   function soundsOn() {
     if (sfx || !(VOLUME > 0) || !window.Spanda) return;
-    sfx = Spanda.createSpanda({ profile: 'lush', volume: VOLUME });
+    var style = CONFIG.soundStyle || 'glass';
+    sfx = Spanda.createSpanda({ profile: style === 'glass' ? GLASS : style, volume: VOLUME });
     // Open the audio context soon, so the first key isn't late, but after the screen is up.
     setTimeout(function () { if (sfx) sfx.resume(); }, 400);
   }
@@ -101,7 +123,7 @@
 
   var SOUNDS = {
     move: 'type',                                       // focus moved: the faintest tap
-    bump: { hits: [{ pitch: 0.72, gain: 0.34, glide: 0.92 }], decay: 0.5, reverb: 0.12, transient: 0.08, sub: 0.45 },
+    bump: { hits: [{ pitch: 0.72, gain: 0.3, glide: 0.92 }], decay: 0.5, reverb: 0.12, transient: 0.08, sub: 0.2 },   // an edge: lower, muted
     select: 'open',                                     // open an app, a button, an input
     back: 'close',
     lift: 'toggleOn',                                   // hold OK: pick a tile up
