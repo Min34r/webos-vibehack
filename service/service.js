@@ -200,7 +200,7 @@ var contextSubs = [];
 
 function pushContext(message) {
   message.respond({
-    returnValue: true, subscribed: true, lastApp: lastApp, weather: weather,
+    returnValue: true, subscribed: true, lastApp: lastApp, weather: weather, light: lightState(),
     devices: (inputs || []).filter(function (d) { return d.connected; })
   });
 }
@@ -256,8 +256,10 @@ function refreshWeather(where) {
   var failed = function (why) { log('weather failed:', why); weatherAt = 0; };
   var fetchAt = function (place) {
     getJSON('https://api.open-meteo.com/v1/forecast?latitude=' + place.lat + '&longitude=' + place.lon +
-        '&current=temperature_2m,weather_code,is_day&timezone=auto', function (err, d) {
+        '&current=temperature_2m,weather_code,is_day&daily=sunrise,sunset&forecast_days=1&timezone=auto' +
+        '&timeformat=unixtime', function (err, d) {
       if (err || !d || !d.current) return failed(err ? err.message : 'no data');
+      if (d.daily && d.daily.sunrise && d.daily.sunset) sun = { rise: d.daily.sunrise[0], set: d.daily.sunset[0] };
       weather = { place: place.name, temp: Math.round(d.current.temperature_2m), code: d.current.weather_code,
                   day: d.current.is_day === 1, at: new Date().toISOString() };
       log('weather: ' + weather.temp + ' deg, code ' + weather.code + ', ' + place.name);
@@ -283,19 +285,17 @@ function refreshWeather(where) {
 
 var govee = null;
 try { govee = require('./govee.json'); } catch (e) { /* not set up: nothing to do */ }
-var goveeOn = null;   // what was last sent successfully
+var goveeOn = null;       // what was last sent successfully
+var lightAuto = true;     // brightness follows day and night; a level picked in the launcher holds until the TV is off
+var lightLevel = null;    // that picked level, in %
+var lightSent = null;     // the brightness last sent successfully
 
-function goveeSwitch(on, retry) {
-  if (!govee || on === goveeOn) return;
-  goveeOn = on;
+/** Sends one capability to the light; done(ok) after Govee answers. */
+function goveeCommand(what, capability, done) {
   var body = JSON.stringify({ requestId: String(Date.now()), payload: { sku: govee.sku, device: govee.device,
-    capability: { type: 'devices.capabilities.on_off', instance: 'powerSwitch', value: on ? 1 : 0 } } });
+    capability: capability } });
   var started = Date.now();
-  var failed = function (why) {
-    log('govee ' + (on ? 'on' : 'off') + ' failed: ' + why);
-    goveeOn = null;
-    if (retry) setTimeout(function () { goveeSwitch(on, false); }, 5000);
-  };
+  var failed = function (why) { log('govee ' + what + ' failed: ' + why); done(false); };
   var req = https.request({ host: 'openapi.api.govee.com', path: '/router/api/v1/device/control', method: 'POST',
     headers: { 'Govee-API-Key': govee.apiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
   }, function (res) {
@@ -303,7 +303,8 @@ function goveeSwitch(on, retry) {
     res.on('data', function (d) { out += d; });
     res.on('end', function () {
       if (res.statusCode !== 200 || !/"code":\s*200/.test(out)) return failed(res.statusCode + ' ' + out.slice(0, 120));
-      log('govee ' + (on ? 'on' : 'off') + ' (' + (Date.now() - started) + ' ms)');
+      log('govee ' + what + ' (' + (Date.now() - started) + ' ms)');
+      done(true);
     });
   });
   req.setTimeout(8000, function () { req.destroy(new Error('timed out')); });
@@ -311,11 +312,66 @@ function goveeSwitch(on, retry) {
   req.end(body);
 }
 
+function goveeSwitch(on, retry) {
+  if (!govee || on === goveeOn) return;
+  goveeOn = on;
+  goveeCommand(on ? 'on' : 'off', { type: 'devices.capabilities.on_off', instance: 'powerSwitch', value: on ? 1 : 0 },
+    function (ok) {
+      if (!ok) {
+        goveeOn = null;
+        if (retry) setTimeout(function () { goveeSwitch(on, false); }, 5000);
+        return;
+      }
+      if (on) applyBrightness();
+      contextChanged();
+    });
+}
+
+// Day and night by the sun at the weather's place (from Open-Meteo, with the weather); without it,
+// night is 21:00 to 7:00 at the launcher's UTC offset. Only brightness changes, never the colour
+// temperature, which would shift how the picture's colours read.
+var sun = null;           // {rise, set} in Unix seconds, for one day: later days repeat it
+var tzOffsetMin = 0;      // the launcher's getTimezoneOffset()
+
+function isNight() {
+  var now = Date.now() / 1000;
+  if (sun) {
+    var dayLength = sun.set - sun.rise;
+    var phase = ((now - sun.rise) % 86400 + 86400) % 86400;
+    return phase >= dayLength;
+  }
+  var hour = new Date(Date.now() - tzOffsetMin * 60000).getUTCHours();
+  return hour >= 21 || hour < 7;
+}
+
+function targetBrightness() {
+  if (!lightAuto && lightLevel) return lightLevel;
+  return isNight() ? (govee.nightBrightness || 35) : (govee.dayBrightness || 75);
+}
+
+/** Sends the brightness the light should have now, if the light is on and it differs. */
+function applyBrightness() {
+  if (!govee || goveeOn !== true) return;
+  var want = targetBrightness();
+  if (want === lightSent) return;
+  var auto = lightAuto;
+  goveeCommand('brightness ' + want + '%' + (auto ? (isNight() ? ' (night)' : ' (day)') : ''),
+    { type: 'devices.capabilities.range', instance: 'brightness', value: want }, function (ok) {
+      if (ok) lightSent = want;
+      contextChanged();
+    });
+}
+
+function lightState() {
+  return govee ? { on: goveeOn === true, auto: lightAuto, level: lightLevel, brightness: lightSent, night: isNight() } : null;
+}
+
 /** The TV's power state: on only while Active and not on its way to standby or off. */
 function onPower(p) {
   var state = p.state || '', processing = p.processing || '';
   var on = state === 'Active' && !/standby|suspend|off/i.test(processing);
   log('power: ' + state + (processing ? ' (' + processing + ')' : ''));
+  if (!on) { lightAuto = true; lightLevel = null; }   // a picked level lasts until the TV is off
   goveeSwitch(on, on);   // switching off, there's no time for a retry before standby
 }
 
@@ -469,16 +525,36 @@ if (Service) {
   });
   service.register('context', function (message) {
     if (message.isSubscription) contextSubs.push(message);
+    if (typeof message.payload.tzOffset === 'number') tzOffsetMin = message.payload.tzOffset;
     refreshWeather(message.payload.weather);
     pushContext(message);
   }, function (message) {
     contextSubs.splice(contextSubs.indexOf(message), 1);
   });
+  // The launcher's Light menu: {power: true|false} or {brightness: 'auto' | 25..100}.
+  service.register('light', function (message) {
+    var p = message.payload;
+    if (!govee) return message.respond({ returnValue: false, errorText: 'no govee.json' });
+    if (p.power === true || p.power === false) {
+      goveeOn = null;   // send it even if the light was switched from the Govee app meanwhile
+      goveeSwitch(p.power, p.power);
+    } else if (p.brightness === 'auto') {
+      lightAuto = true;
+      lightLevel = null;
+      applyBrightness();
+    } else if (p.brightness >= 1 && p.brightness <= 100) {
+      lightAuto = false;
+      lightLevel = Math.round(p.brightness);
+      applyBrightness();
+    }
+    message.respond({ returnValue: true, light: lightState() });
+  });
   service.register('status', function (message) {
     var at = lastExtended();
     message.respond({ returnValue: true, connected: connected, apps: apps ? apps.length : null, weather: weather,
+      light: lightState(), sun: sun,
       devModeExtended: at ? new Date(at).toISOString() : null, uptime: Math.round(os.uptime()),
-      govee: govee ? { sku: govee.sku, on: goveeOn } : null, logFile: LOG_FILE, log: recent.slice(-60) });
+      govee: govee ? { sku: govee.sku } : null, logFile: LOG_FILE, log: recent.slice(-60) });
   });
   service.register('allowLgHome', function (message) {
     passUntil = Date.now() + ESCAPE_MS;
@@ -513,6 +589,7 @@ if (Service) {
   watch();
   keepDevMode();
   setInterval(keepDevMode, 3600 * 1000);
+  if (govee) setInterval(applyBrightness, 60 * 1000);   // day turning to night (a no-op otherwise)
 } else {
   watch();   // run by hand: node service.js
 }

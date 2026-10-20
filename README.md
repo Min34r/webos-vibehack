@@ -115,7 +115,7 @@ Closer to an Apple TV than the original layout: 5:3 icons with ~16 px corners, a
 icon itself growing (x1.12) on a spring over a soft shadow, with no frame. It tips the way focus
 came from and a highlight sweeps across it (`tilt: false` in `config.js` turns that off). Icons
 carry no names, and the dock is a glass shelf (a faint tint and a bright top edge, no blur), wide
-enough for a grown icon. The status bar is small and top right: round glass buttons (Inputs, Settings, LG), named under
+enough for a grown icon. The status bar is small and top right: round glass buttons (Inputs, Light, Settings, LG), named under
 the focused one, then the time. The backdrop is built from the focused app's colour: pools of
 light in its hue and two close neighbours on a base tinted with it, a vignette and a faint grain
 against banding, no image or symbol (a grey logo gets a steel blue). It's drawn on a 480x270 canvas
@@ -155,7 +155,17 @@ TV_HOST=192.168.1.50 ./install.sh
 ```
 
 The service subscribes to the TV's power state and sends a command only when it changes (about
-0.8 s per command); the log says what was sent. `rm govee.json && ./install.sh` turns it off.
+0.5 s per command): the light goes off as soon as the TV reports "Request Power Off", seconds before
+standby. The log says what was sent. `rm govee.json && ./install.sh` turns it off.
+
+- **Day and night brightness**: `dayBrightness` (75 %) until sunset and `nightBrightness` (35 %)
+  after it, by the sun at the weather's place (from Open-Meteo, with the weather; 21:00 to 7:00
+  without one). Only brightness changes, never the colour temperature, which would shift how the
+  picture's colours read. Edit them in `govee.json`, then `./install.sh`.
+- **A Light button** in the status bar (shown only when `govee.json` is set up): on/off, automatic
+  brightness, or a fixed level (25, 50, 75, 100 %) until the TV next turns off. The H6097's screen
+  sync can't be switched through Govee's API ("The device does not has DreamView"): it stays in
+  the Govee app.
 
 ## App list
 

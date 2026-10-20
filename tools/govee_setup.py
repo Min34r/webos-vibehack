@@ -46,7 +46,9 @@ def main(key, sku):
     try:
         with open(OUT, "w") as f:
             json.dump({"apiKey": key, "sku": pick["sku"], "device": pick["device"],
-                       "name": pick.get("deviceName", "")}, f, indent=1)
+                       "name": pick.get("deviceName", ""),
+                       # brightness (%) by day and after sunset; edit to taste, then ./install.sh
+                       "dayBrightness": 75, "nightBrightness": 35}, f, indent=1)
     finally:
         os.umask(old)
     print(f"Wrote govee.json for {pick['sku']} ({pick.get('deviceName', '')}). Now run ./install.sh.")

@@ -25,13 +25,19 @@
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
 
   var ICON_PLAY = 'M8,5v14l11,-7z';
+  var ICON_CHECK = 'M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z';
+  var ICON_POWER = 'M13,3h-2v10h2V3zM17.83,5.17l-1.42,1.42C17.99,7.86 19,9.81 19,12c0,3.87 -3.13,7 -7,7s-7,-3.13 -7,-7c0,-2.19 1.01,-4.14 2.58,-5.42L6.17,5.17C4.23,6.82 3,9.26 3,12c0,4.97 4.03,9 9,9s9,-4.03 9,-9c0,-2.74 -1.23,-5.18 -3.17,-6.83z';
+  var ICON_AUTO = 'M12,7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5 5,-2.24 5,-5 -2.24,-5 -5,-5zM2,13h2c0.55,0 1,-0.45 1,-1s-0.45,-1 -1,-1H2c-0.55,0 -1,0.45 -1,1s0.45,1 1,1zM20,13h2c0.55,0 1,-0.45 1,-1s-0.45,-1 -1,-1h-2c-0.55,0 -1,0.45 -1,1s0.45,1 1,1zM11,2v2c0,0.55 0.45,1 1,1s1,-0.45 1,-1V2c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1zM11,20v2c0,0.55 0.45,1 1,1s1,-0.45 1,-1v-2c0,-0.55 -0.45,-1 -1,-1 -0.55,0 -1,0.45 -1,1z';
+  var ICON_LEVEL = 'M20,8.69V4h-4.69L12,0.69 8.69,4H4v4.69L0.69,12 4,15.31V20h4.69L12,23.31 15.31,20H20v-4.69L23.31,12 20,8.69zM12,18c-3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6 6,2.69 6,6 -2.69,6 -6,6z';
   var ICON_INPUT = 'M18,7V4c0,-1.1 -0.9,-2 -2,-2H8C6.9,2 6,2.9 6,4v3H5v6l3,6v3h8v-3l3,-6V7H18zM8,4h8v3h-2V5h-1v2h-2V5h-1v2H8V4z';
   var ICON_LIVETV = 'M21,6h-7.59l3.29,-3.29L16,2l-4,4l-4,-4l-0.71,0.71L10.59,6H3c-1.1,0 -2,0.89 -2,2v12c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.89 2,-2V8C23,6.89 22.1,6 21,6zM21,20H3V8h18V20zM9,10v8l7,-4L9,10z';
 
   var $ = function (id) { return document.getElementById(id); };
   var stage = $('stage'), tilesEl = $('tiles'), shadow = $('shadow');
   var ambients = [$('ambientA'), $('ambientB')], ambientFront = 0, ambientColor = null;
-  var pills = [$('btnInputs'), $('btnSettings'), $('btnLgHome')];
+  // Light shows only with a Govee light set up (govee.json): pills holds the visible ones.
+  var allPills = [$('btnInputs'), $('btnLight'), $('btnSettings'), $('btnLgHome')];
+  var pills = allPills.filter(function (p) { return p.style.display !== 'none'; });
   var panel = $('inputsPanel');
 
   var items = [];               // {app, el, color}
@@ -606,7 +612,7 @@
 
   // From the service: the last app used, HDMI devices that are on, the weather. The last app is
   // kept here too, so "Resume" survives a power cut (the service's copy lives in its /tmp).
-  var context = { lastApp: null, devices: [], weather: null };
+  var context = { lastApp: null, devices: [], weather: null, light: null };
   var contextBridge = null, shelfKey = '';
   try { context.lastApp = localStorage.getItem('tvhome.lastApp'); } catch (e) { /* none */ }
 
@@ -713,7 +719,7 @@
       bridges.splice(bridges.indexOf(contextBridge), 1);
     }
     contextBridge = luna('luna://com.gathin.tvhome.service/context',
-      { subscribe: true, weather: CONFIG.weather || null }, function (res) {
+      { subscribe: true, weather: CONFIG.weather || null, tzOffset: new Date().getTimezoneOffset() }, function (res) {
         if (res.returnValue === false) return;
         if (res.lastApp && res.lastApp !== context.lastApp) {
           context.lastApp = res.lastApp;
@@ -721,6 +727,9 @@
         }
         context.devices = res.devices || [];
         if (res.weather) context.weather = res.weather;
+        context.light = res.light || null;
+        refreshPills();
+        if (zone === 'inputs' && pills[menuPill] === $('btnLight')) showLightMenu(inputFocus);
         renderShelf();
         renderWeather(context.weather);
       });
@@ -744,8 +753,19 @@
   function activatePill(i) {
     var id = pills[i].id;
     if (id === 'btnInputs') showInputs();
+    else if (id === 'btnLight') showLightMenu(0);
     else if (id === 'btnSettings') launch('com.palm.app.settings', 'Paramètres');
     else openLgHome();
+  }
+
+  /** Shows the Light pill when the service reports a Govee light, hides it otherwise. */
+  function refreshPills() {
+    var light = $('btnLight'), want = context.light ? '' : 'none';
+    if (light.style.display === want) return;
+    light.style.display = want;
+    var was = pills[pillFocus];
+    pills = allPills.filter(function (p) { return p.style.display !== 'none'; });
+    pillFocus = Math.max(0, pills.indexOf(was));
   }
 
   /** The way back to LG's home: the Home watcher lets it through. Works too if the watcher is down. */
@@ -757,45 +777,96 @@
 
   // ---- inputs dropdown -----------------------------------------------------------------------
 
-  function showInputs() {
+  // ---- dropdown menus (Inputs, Light) ---------------------------------------------------------
+
+  var menuPill = 0;   // the pill the open menu hangs from, where Back returns
+
+  /**
+   * Opens the dropdown under a pill. rows: {icon, label, dot, check, run, keepOpen}, or null for a
+   * separator. A keepOpen row runs and leaves the menu up (it redraws itself); others close it.
+   */
+  function showMenu(pill, rows, focusAt) {
     panel.innerHTML = '';
     inputRows = [];
-    var inputs = (window.TV_APPS && TV_APPS.inputs) || [];
-    var on = {};
-    (context.devices || []).forEach(function (d) { on[d.appId] = true; });
-    inputs.forEach(function (inp) { addInputRow(ICON_INPUT, inp.label, inp.appId, on[inp.appId]); });
-    if (CONFIG.liveTvApp) {
-      if (inputRows.length) panel.appendChild(Object.assign(document.createElement('div'), { className: 'separator' }));
-      addInputRow(ICON_LIVETV, 'TV en direct', CONFIG.liveTvApp);
-    }
-    if (!inputRows.length) { toast('Aucune entrée trouvée'); return; }
-
-    // Hang right below the Inputs pill, at least as wide as it.
-    var r = pageRect(pills[0]);
+    rows.forEach(function (r) {
+      if (r) addMenuRow(r);
+      else if (inputRows.length) panel.appendChild(Object.assign(document.createElement('div'), { className: 'separator' }));
+    });
+    if (!inputRows.length) return false;
+    // Hang right below the pill, at least as wide as it, kept inside the screen's right margin.
+    var r = pageRect(pill);
     panel.style.left = r.left + 'px';
     panel.style.top = (r.bottom + 20) + 'px';
     panel.style.minWidth = Math.max(r.width, 300) + 'px';
     panel.classList.remove('hidden');
-    pills[pillFocus].classList.remove('focused');
+    var w = pageRect(panel).width;
+    if (r.left + w > 1920 - 48) panel.style.left = (1920 - 48 - w) + 'px';
+    if (pills[pillFocus]) pills[pillFocus].classList.remove('focused');
+    menuPill = Math.max(0, pills.indexOf(pill));
     zone = 'inputs';
-    focusInput(0);
+    focusInput(focusAt || 0);
+    return true;
+  }
+
+  function runMenuRow(i) {
+    var item = inputRows[i] && inputRows[i].item;
+    if (!item) return;
+    if (!item.keepOpen) hideInputs();
+    item.run();
+  }
+
+  function showInputs() {
+    var inputs = (window.TV_APPS && TV_APPS.inputs) || [];
+    var on = {};
+    (context.devices || []).forEach(function (d) { on[d.appId] = true; });
+    var row = function (icon, label, appId, dot) {
+      return { icon: icon, label: label, dot: dot, run: function () { launch(appId, label); } };
+    };
+    var rows = inputs.map(function (inp) { return row(ICON_INPUT, inp.label, inp.appId, on[inp.appId]); });
+    if (CONFIG.liveTvApp) rows.push(null, row(ICON_LIVETV, 'TV en direct', CONFIG.liveTvApp));
+    if (!showMenu($('btnInputs'), rows)) toast('Aucune entrée trouvée');
+  }
+
+  /** The Govee light: on/off, automatic (day/night) brightness or a fixed level. */
+  function showLightMenu(focusAt) {
+    var s = context.light;
+    if (!s) return;
+    var set = function (payload) {
+      luna('luna://com.gathin.tvhome.service/light', payload, function (res) {
+        if (!res.light) { toast('Lumière injoignable'); return; }
+        context.light = res.light;
+        if (zone === 'inputs' && pills[menuPill] === $('btnLight')) showLightMenu(inputFocus);
+      });
+    };
+    var level = function (label, v) {
+      return { icon: ICON_LEVEL, label: label, check: !s.auto && s.level === v, keepOpen: true,
+               run: function () { set({ brightness: v }); } };
+    };
+    showMenu($('btnLight'), [
+      { icon: ICON_POWER, label: s.on ? 'Éteindre' : 'Allumer', keepOpen: true, run: function () { set({ power: !s.on }); } },
+      null,
+      { icon: ICON_AUTO, label: 'Luminosité automatique', check: s.auto, keepOpen: true,
+        run: function () { set({ brightness: 'auto' }); } },
+      level('Faible', 25), level('Moyenne', 50), level('Forte', 75), level('Maximale', 100)
+    ], focusAt);
   }
 
   /** A row of the Inputs menu; a device that is on gets the shelf's lit dot at its end. */
-  function addInputRow(icon, label, appId, on) {
+  /** A menu row; a device that is on gets the shelf's lit dot, the current choice a check. */
+  function addMenuRow(item) {
     var row = document.createElement('div');
     row.className = 'inputRow';
-    row.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icon + '"/></svg>';
+    row.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + item.icon + '"/></svg>';
     var text = document.createElement('span');
     text.className = 'label';
-    text.textContent = label;
+    text.textContent = item.label;
     row.appendChild(text);
-    if (on) row.appendChild(Object.assign(document.createElement('span'), { className: 'dot' }));
+    if (item.dot) row.appendChild(Object.assign(document.createElement('span'), { className: 'dot' }));
+    if (item.check) row.insertAdjacentHTML('beforeend', '<svg class="check" viewBox="0 0 24 24"><path d="' + ICON_CHECK + '"/></svg>');
     var idx = inputRows.length;
     row.addEventListener('mouseover', function () { focusInput(idx); });
-    row.addEventListener('click', function () { hideInputs(); launch(appId, label); });
-    row.appId = appId;
-    row.label = label;
+    row.addEventListener('click', function () { runMenuRow(idx); });
+    row.item = item;
     inputRows.push(row);
     panel.appendChild(row);
   }
@@ -809,7 +880,7 @@
   function hideInputs() {
     panel.classList.add('hidden');
     zone = 'none';
-    focusPill(0);
+    focusPill(menuPill);
   }
 
   // ---- rearranging ---------------------------------------------------------------------------
@@ -887,7 +958,7 @@
     } else if (zone === 'inputs') {
       if (k === KEY.UP) focusInput(inputFocus - 1);
       else if (k === KEY.DOWN) focusInput(inputFocus + 1);
-      else if (k === KEY.OK) { var row = inputRows[inputFocus]; hideInputs(); sound('select'); launch(row.appId, row.label); }
+      else if (k === KEY.OK) { sound('select'); runMenuRow(inputFocus); }
       else if (k === KEY.BACK || k === KEY.ESC || k === KEY.LEFT || k === KEY.RIGHT) hideInputs();
       else return;
     } else if (zone === 'shelf') {
@@ -931,9 +1002,9 @@
     e.preventDefault();
   });
 
-  pills.forEach(function (p, i) {
-    p.addEventListener('mouseover', function () { if (zone !== 'inputs') focusPill(i); });
-    p.addEventListener('click', function () { activatePill(i); });
+  allPills.forEach(function (p) {
+    p.addEventListener('mouseover', function () { if (zone !== 'inputs') focusPill(pills.indexOf(p)); });
+    p.addEventListener('click', function () { activatePill(pills.indexOf(p)); });
   });
 
   // ---- lifecycle -----------------------------------------------------------------------------

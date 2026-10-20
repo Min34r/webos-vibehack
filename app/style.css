@@ -417,6 +417,9 @@ body.no-tilt .item.focused .card, body.no-tilt .item.focused .sheen { animation:
 
 .inputRow .dot { margin-left: 28px; }
 
+/* The Light menu's current choice. */
+.inputRow .check { width: 34px; height: 34px; margin: 0 0 0 28px; }
+
 .inputRow.focused { background: rgba(255, 255, 255, 0.96); color: #000; }
 
 .separator { height: 2px; margin: 12px 24px; background: rgba(255, 255, 255, 0.12); }
