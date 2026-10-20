@@ -113,7 +113,12 @@ icon itself growing (x1.12) on a spring over a soft shadow, with no frame. It ti
 came from and a highlight sweeps across it (`tilt: false` in `config.js` turns that off). Icons
 carry no names, and the dock is a glass shelf (a faint tint and a bright top edge, no blur), wide
 enough for a grown icon. The status bar is small and top right: round glass buttons (Inputs, Wi-Fi, Settings, LG), named under
-the focused one, then the time. Going below the dock dims the glow, and coming back up returns to
+the focused one, then the time. The backdrop is built from the focused app's colour: pools of
+light in its hue and two close neighbours on a base tinted with it, a vignette and a faint grain
+against banding, no image or symbol (a grey logo gets a steel blue). It's drawn on a 480x270 canvas
+the GPU scales up: as a CSS gradient it was rasterised at full size on every change, ~8 late frames
+per dock sweep. It can drift slowly (`drift: true`), off by default as that costs ~35% of a CPU
+core even at rest. Going below the dock dims the backdrop, and coming back up returns to
 the dock tile last left. Inter stands in for SF Pro. Measured on a C4: 60 fps on the dock and in
 the status bar, about 51 MB when the launcher opens.
 

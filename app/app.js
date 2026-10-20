@@ -447,6 +447,58 @@
     shadow.style.opacity = '0';
   }
 
+  // Pools of light: ellipse width and height (in the 480x270 canvas), centre (fraction of the
+  // canvas), hue shift, saturation and value factors, opacity at the centre. Topmost first.
+  var POOLS = [
+    [190, 130, 0.24, 0.36, 0, 1, 0.66, 0.55],
+    [160, 110, 0.80, 0.16, 18, 0.9, 0.6, 0.38],
+    [230, 100, 0.60, 0.94, -22, 1, 0.45, 0.42],
+    [120, 90, 0.96, 0.70, 12, 0.7, 0.5, 0.2]
+  ];
+
+  /**
+   * Draws an app colour as a backdrop: pools of light in its hue and two neighbours (warmer above,
+   * cooler low behind the dock) on a base tinted with it. A grey app (white or black logo) gets a
+   * dimmer steel blue: a plain grey reads flat. Neighbours stay within ~20 degrees: further, a red
+   * turns to a muddy orange.
+   */
+  function drawBackdrop(canvas, rgb) {
+    var hsv = rgbToHsv(rgb), hue = hsv[0], grey = hsv[1] < 0.12;
+    var sat = grey ? 0.28 : Math.min(0.9, Math.max(0.6, hsv[1] * 1.3));   // logos sampled small come out washed
+    var light = grey ? 0.7 : 1;
+    if (grey) hue = 215;
+    var tone = function (shift, s, v, a) {
+      return 'rgba(' + hsvToRgb([(hue + shift + 360) % 360, sat * s, v * light]).join(',') + ',' + a + ')';
+    };
+    var g = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = tone(0, 0.75, 0.075, 1);
+    g.fillRect(0, 0, W, H);
+    POOLS.slice().reverse().forEach(function (p) {
+      var cx = p[2] * W, cy = p[3] * H, k = p[0] / p[1];
+      g.setTransform(k, 0, 0, 1, cx, cy);   // an ellipse: a circle of radius h, stretched
+      var grad = g.createRadialGradient(0, 0, 0, 0, 0, p[1]);
+      grad.addColorStop(0, tone(p[4], p[5], p[6], p[7]));
+      grad.addColorStop(1, tone(p[4], p[5], p[6], 0));
+      g.fillStyle = grad;
+      g.fillRect(-cx / k, -cy, W / k, H);
+    });
+  }
+
+  /** A small tile of random grey noise for #grain, made once (cheaper than shipping an image). */
+  function makeGrain() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 128;
+    var g = c.getContext('2d'), img = g.createImageData(128, 128);
+    for (var i = 0; i < img.data.length; i += 4) {
+      var v = Math.random() * 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    $('grain').style.backgroundImage = 'url(' + c.toDataURL() + ')';
+  }
+
   /** Crossfades the glow to a new colour by swapping between two layers. */
   function setAmbient(color) {
     if (!color) return;
@@ -454,8 +506,7 @@
     if (key === ambientColor) return;
     ambientColor = key;
     var back = ambients[1 - ambientFront];
-    back.style.background = 'radial-gradient(circle 297.5px at 32% 42%, rgba(' + key + ',0.36) 0%, rgba(' +   // 1190px at x4
-      key + ',0.15) 50%, rgba(' + key + ',0) 100%)';
+    drawBackdrop(back, color);
     back.style.opacity = '1';
     ambients[ambientFront].style.opacity = '0';
     ambientFront = 1 - ambientFront;
@@ -736,6 +787,8 @@
   });
 
   document.body.classList.toggle('no-tilt', CONFIG.tilt === false);
+  document.body.classList.toggle('no-drift', CONFIG.drift !== true);
+  makeGrain();
   applyTitles();
   build();
   updateClock();

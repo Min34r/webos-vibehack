@@ -6,9 +6,14 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Ambient glow in the colour of the focused dock app; two layers so colours crossfade. -->
-  <div id="ambientA" class="ambient"></div>
-  <div id="ambientB" class="ambient"></div>
+  <!-- Backdrop in the colours of the focused app: two layers so colours crossfade, drifting slowly. -->
+  <div id="ambience">
+    <canvas id="ambientA" class="ambient" width="480" height="270"></canvas>
+    <canvas id="ambientB" class="ambient" width="480" height="270"></canvas>
+  </div>
+  <!-- Darker edges and bottom keep the dock legible; a fine grain hides gradient banding. -->
+  <div id="vignette"></div>
+  <div id="grain"></div>
 
   <!-- Below the dock the glow dims, as tvOS fades its top shelf. -->
   <div id="dim"></div>

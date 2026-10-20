@@ -20,11 +20,31 @@ html, body {
   cursor: default;
 }
 
-/* ---- ambient glow ---------------------------------------------------------------------------- */
+/* ---- backdrop -------------------------------------------------------------------------------- */
 
-/* A soft gradient needs no resolution: drawn at a quarter size and scaled x4, a colour change
-   repaints 16 times fewer pixels. */
+/* Pools of soft light in the focused app's colours (built in app.js). They can drift very slowly
+   (config drift: true), but an endless animation keeps the TV drawing frames: body.no-drift, the
+   default, holds them still. */
+#ambience {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  animation: drift 50s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes drift {
+  from { transform: scale(1.08) translate(1.5%, -1%); }
+  to { transform: scale(1.08) translate(-1.5%, 1%); }
+}
+
+body.no-drift #ambience { animation: none; transform: scale(1.08); }
+
+/* A soft gradient needs no resolution: each backdrop is a 480x270 canvas the GPU scales x4, so a
+   colour change draws 16 times fewer pixels. (A CSS gradient scaled x4 is still rasterised at its
+   on-screen size: that cost ~8 late frames per dock sweep.) */
 .ambient {
+  display: block;
   position: absolute;
   left: 0;
   top: 0;
@@ -36,6 +56,28 @@ html, body {
   transition: opacity 600ms ease;
   pointer-events: none;
   will-change: opacity;
+}
+
+/* Static: drawn once, whatever the app. */
+#vignette {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 25%;
+  height: 25%;
+  transform: scale(4);
+  transform-origin: 0 0;
+  background: radial-gradient(ellipse at 50% 38%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.55) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.45) 100%);
+  pointer-events: none;
+}
+
+/* Fine noise (a tile made in app.js) at a whisper: dark gradients otherwise show steps. */
+#grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  pointer-events: none;
 }
 
 /* Below the dock the glow dims, as tvOS fades its top shelf when the rows scroll up. */

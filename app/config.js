@@ -35,5 +35,9 @@ window.CONFIG = {
   sounds: 0.5,
 
   // The focused icon tips the way focus came from, with a sweeping highlight. false to turn off.
-  tilt: true
+  tilt: true,
+
+  // Let the backdrop's colours drift very slowly. Off by default: on a C4 the endless animation
+  // costs ~35% of a CPU core even when nothing else moves, and a few late frames when navigating.
+  drift: false
 };
