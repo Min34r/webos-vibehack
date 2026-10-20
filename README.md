@@ -115,7 +115,7 @@ Closer to an Apple TV than the original layout: 5:3 icons with ~16 px corners, a
 icon itself growing (x1.12) on a spring over a soft shadow, with no frame. It tips the way focus
 came from and a highlight sweeps across it (`tilt: false` in `config.js` turns that off). Icons
 carry no names, and the dock is a glass shelf (a faint tint and a bright top edge, no blur), wide
-enough for a grown icon. The status bar is small and top right: round glass buttons (Inputs, Wi-Fi, Settings, LG), named under
+enough for a grown icon. The status bar is small and top right: round glass buttons (Inputs, Settings, LG), named under
 the focused one, then the time. The backdrop is built from the focused app's colour: pools of
 light in its hue and two close neighbours on a base tinted with it, a vignette and a faint grain
 against banding, no image or symbol (a grey logo gets a steel blue). It's drawn on a 480x270 canvas
@@ -153,7 +153,7 @@ the service stays at about 25 MB and the launcher at about 45 MB, as before.
 ## Using it
 
 Same as the [Android launcher](https://github.com/Gathin23/tv-vibehack#the-launcher): a dock of four apps with the focused app's name above it and a glow
-in its colour, the rest of your apps in a grid below, and Inputs (HDMI ports and Live TV), Wi-Fi,
+in its colour, the rest of your apps in a grid below, and Inputs (HDMI ports and Live TV),
 Settings and LG (LG's own home) at the top. The header slides away when the grid scrolls into it.
 
 **Rearrange tiles on the TV**: hold **OK** on a tile until it wiggles, move it with the arrows

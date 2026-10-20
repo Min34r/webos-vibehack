@@ -31,7 +31,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var stage = $('stage'), tilesEl = $('tiles'), shadow = $('shadow');
   var ambients = [$('ambientA'), $('ambientB')], ambientFront = 0, ambientColor = null;
-  var pills = [$('btnInputs'), $('btnWifi'), $('btnSettings'), $('btnLgHome')];
+  var pills = [$('btnInputs'), $('btnSettings'), $('btnLgHome')];
   var panel = $('inputsPanel');
 
   var items = [];               // {app, el, color}
@@ -741,22 +741,10 @@
     $('clock').textContent = now.getHours() + ':' + (m < 10 ? '0' : '') + m;
   }
 
-  /** Shows the connection type (not the network name: a long one pushes the LG button off screen). */
-  function watchNetwork() {
-    luna('luna://com.palm.connectionmanager/getStatus', { subscribe: true }, function (res) {
-      if (res.returnValue === false && !res.wifi && !res.wired) return;
-      var text = 'Wi-Fi';
-      if (res.wired && res.wired.state === 'connected') text = 'Ethernet';
-      else if (res.wifi && res.wifi.state === 'connected') text = 'Wi-Fi';
-      else if (res.isInternetConnectionAvailable === false) text = 'Hors ligne';
-      $('wifiLabel').textContent = text;
-    });
-  }
-
   function activatePill(i) {
-    if (i === 0) showInputs();
-    else if (i === 1) launch('com.palm.app.settings', 'Settings', { target: 'network' });
-    else if (i === 2) launch('com.palm.app.settings', 'Settings');
+    var id = pills[i].id;
+    if (id === 'btnInputs') showInputs();
+    else if (id === 'btnSettings') launch('com.palm.app.settings', 'Paramètres');
     else openLgHome();
   }
 
@@ -1011,7 +999,6 @@
   build();
   updateClock();
   unpause();
-  watchNetwork();
   startHomeWatch();
   watchApps();
   renderShelf();
