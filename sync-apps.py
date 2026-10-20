@@ -60,6 +60,11 @@ async def main(host, list_only):
             "icon": "icons/" + name,
             "iconColor": p.get("iconColor") or p.get("bgColor") or "",
         })
+    # Drop icons left from apps since removed or given a vector logo: they would ship in the package.
+    used = {os.path.basename(a["icon"]) for a in apps if a["icon"].startswith("icons/")}
+    for f in os.listdir(icon_dir):
+        if f not in used:
+            os.remove(os.path.join(icon_dir, f))
     out = {
         "apps": apps,
         "inputs": [{"appId": d["appId"], "label": d.get("label") or d["id"]} for d in inputs if d.get("appId")],

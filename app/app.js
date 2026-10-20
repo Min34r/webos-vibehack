@@ -43,6 +43,7 @@
   var focused = 0, pillFocus = 0, inputFocus = 0, inputRows = [];
   var offset = 0, heroShown = false, glassShown = false;
   var editing = null;           // {item, snapshot} while a tile is being moved
+  var headerBottom = null;
 
   // ---- luna bus ------------------------------------------------------------------------------
 
@@ -286,7 +287,8 @@
     try {
       var c = document.createElement('canvas');
       c.width = 12; c.height = 12;
-      var g = c.getContext('2d');
+      // Read back on the CPU: a GPU canvas made each getImageData a ~30 ms readback on this TV.
+      var g = c.getContext('2d', { willReadFrequently: true });
       g.drawImage(img, 0, 0, 12, 12);
       px = g.getImageData(0, 0, 12, 12).data;
       edge = edgeColor(img);
@@ -316,7 +318,7 @@
     var w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
     var c = document.createElement('canvas');
     c.width = w; c.height = h;
-    var g = c.getContext('2d');
+    var g = c.getContext('2d', { willReadFrequently: true });
     g.drawImage(img, 0, 0, w, h);
     var corner = g.getImageData(2, 2, 1, 1).data;
     return corner[3] > 200 ? corner : g.getImageData(2, Math.floor(h / 2), 1, 1).data;
@@ -404,9 +406,12 @@
       if (top - offset - 24 < VIEW_TOP) offset = top - 24 - VIEW_TOP;
     }
     stage.style.transform = 'translateY(' + (-offset) + 'px)';
-    // Keep the header until the content (the dock band is topmost) would run into it.
-    var header = document.querySelector('header');
-    var headerBottom = header.offsetTop + header.offsetHeight;   // layout box: ignores the hide slide
+    // Keep the header until the content (the dock band is topmost) would run into it. Its layout box
+    // (which ignores the hide slide) never changes: measured once, not with a forced layout per move.
+    if (headerBottom === null) {
+      var header = document.querySelector('header');
+      headerBottom = header.offsetTop + header.offsetHeight;
+    }
     document.body.classList.toggle('scrolled', DOCK_TOP - 28 - offset < headerBottom + 24);
 
     var w = TILE_W * FOCUS_SCALE + 2 * GLASS_PAD, h = TILE_H * FOCUS_SCALE + 2 * GLASS_PAD;

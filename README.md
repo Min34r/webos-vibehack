@@ -137,7 +137,8 @@ builds those tiles from logos on Wikimedia Commons: add a line for a new app, ru
 LG's own home does. Tiles, the focus glass and the title are GPU layers (tiles drawn at their
 focused size, so they stay sharp) and the colour glow is drawn at a quarter size, so moving around
 redraws almost nothing. Behind another app the launcher stops its clock and closes its audio
-context. Measured on a C4: 60 fps along the dock with no late frame, about 44 MB when it opens.
+context. Measured on a C4: 60 fps along the dock with no late frame, about 44 MB and under half a second
+to open (tile colours are sampled on CPU canvases: GPU read-backs took ~30 ms a tile).
 Setting `resolution` to `3840x2160` in `appinfo.json` makes `app.js` zoom the layout x2 for native
 4K: sharper text, but 57-58 fps and about 77 MB.
 
