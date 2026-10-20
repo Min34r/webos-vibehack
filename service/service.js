@@ -32,16 +32,37 @@ var PERMISSIONS = [
 var clientKey = null;
 try { clientKey = require('./key.json').key; } catch (e) { /* not bundled: pair with a prompt */ }
 
-// The service's console goes nowhere a developer can read: keep a short log next to it, readable over
-// the Developer Mode SSH (/media/developer/apps/usr/palm/services/com.gathin.tvhome.service/service.log).
-var LOG_FILE = __dirname + '/service.log';
+// Where the service may write. Its own folder is readable over the Developer Mode SSH, but webOS
+// installs it read-only for the service (rwxrwxr-x, another owner): only files that already exist
+// there can be written, never created or renamed. /tmp always works, but is private to the service
+// and lost at power off. The 'status' method returns the recent log either way.
+var DIRS = [__dirname, '/tmp'];
+
+function writable(name) {
+  for (var i = 0; i < DIRS.length; i++) {
+    try { fs.appendFileSync(DIRS[i] + '/' + name, ''); return DIRS[i] + '/' + name; } catch (e) { /* next */ }
+  }
+  return null;
+}
+
+var LOG_FILE = writable('service.log');
+var LOG_MAX = 64 * 1024;
+var recent = [];   // the last lines, for the 'status' method
+
 var log = function () {
   var line = new Date().toISOString() + ' ' + [].slice.call(arguments).join(' ');
   console.log('[home-watch]', line);
+  recent.push(line);
+  if (recent.length > 200) recent.shift();
+  if (!LOG_FILE) return;
   try {
-    if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > 64 * 1024) fs.renameSync(LOG_FILE, LOG_FILE + '.1');
+    if (fs.statSync(LOG_FILE).size > LOG_MAX) {
+      // Rotate in place, keeping the newer half: a rename would need write access to the folder.
+      var keep = fs.readFileSync(LOG_FILE, 'utf8').slice(-LOG_MAX / 2);
+      fs.writeFileSync(LOG_FILE, keep.slice(keep.indexOf('\n') + 1));
+    }
     fs.appendFileSync(LOG_FILE, line + '\n');
-  } catch (e) { /* not writable here: console only */ }
+  } catch (e) { /* console and 'status' only */ }
 };
 
 /** A minimal WebSocket client: text frames only, enough for the TV's JSON messages. */
@@ -167,6 +188,7 @@ function pushApps(message) {
 }
 
 var running = false;
+var connected = false;
 var bootLaunchDone = false;
 var bootCheck = false;   // the next foreground report decides the cold-boot launch
 var passUntil = 0;   // set by allowLgHome: the launcher's LG button opens LG's home on purpose
@@ -185,6 +207,7 @@ function watch() {
     try { msg = JSON.parse(raw); } catch (e) { return; }
     if (msg.type === 'registered') {
       clientKey = msg.payload['client-key'];
+      connected = true;
       log('connected');
       ws.send({ type: 'subscribe', id: 'fg', uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo', payload: {} });
       ws.send({ type: 'subscribe', id: 'lp', uri: 'ssap://com.webos.applicationManager/listLaunchPoints', payload: {} });
@@ -234,40 +257,58 @@ function watch() {
   }, function () {
     log('disconnected, retrying');
     running = false;
+    connected = false;
     setTimeout(watch, 3000);
   });
 }
 
 var DEVMODE_TOKEN = '/var/luna/preferences/devmode_enabled';
-var EXTEND_EVERY_MS = 24 * 3600 * 1000;
+var EXTENDED_FILE = writable('devmode-extended');   // when it last worked, across service restarts
+var EXTEND_EVERY_MS = 20 * 3600 * 1000;
 var RETRY_MS = 10 * 60 * 1000;
+var extending = false;
+var extendedAt = 0;
+
+function lastExtended() {
+  var saved = 0;
+  try { saved = Number(fs.readFileSync(EXTENDED_FILE, 'utf8')) || 0; } catch (e) { /* none yet */ }
+  return Math.max(saved, extendedAt);
+}
 
 /** Resets the Developer Mode countdown (it would otherwise disable the launcher after ~1000 hours). */
-function extendDevMode() {
+function extendDevMode(done) {
   var token;
-  try { token = fs.readFileSync(DEVMODE_TOKEN, 'utf8').trim(); } catch (e) { return log('no dev mode token:', e.message); }
+  try { token = fs.readFileSync(DEVMODE_TOKEN, 'utf8').trim(); } catch (e) { log('no dev mode token:', e.message); return done(false); }
   var req = https.get('https://developer.lge.com/secure/ResetDevModeSession.dev?sessionToken=' + encodeURIComponent(token), function (res) {
     var body = '';
     res.on('data', function (d) { body += d; });
     res.on('end', function () {
       log('dev mode session extended:', body);
-      if (!/"success"/.test(body)) setTimeout(extendDevMode, RETRY_MS);
+      done(/"success"/.test(body));
     });
   });
   req.setTimeout(30000, function () { req.destroy(new Error('timed out')); });
   req.on('error', function (e) {
-    log('dev mode extend failed:', e.message);
-    setTimeout(extendDevMode, RETRY_MS);   // the network may not be up yet after standby
+    log('dev mode extend failed:', e.message);   // the network may not be up yet after standby
+    done(false);
   });
 }
 
-var extending = false;
-
+/**
+ * Extends the session when the last success is EXTEND_EVERY_MS old by the wall clock. Called at
+ * start, whenever the launcher shows and every hour: a 24-hour timer alone drifts, as timers stop
+ * while the TV sleeps.
+ */
 function keepDevMode() {
-  if (extending) return;
+  var last = lastExtended();
+  if (extending || Date.now() - last < EXTEND_EVERY_MS) return;
   extending = true;
-  extendDevMode();
-  setInterval(extendDevMode, EXTEND_EVERY_MS);
+  extendDevMode(function (ok) {
+    extending = false;
+    if (!ok) return setTimeout(keepDevMode, RETRY_MS);
+    extendedAt = Date.now();
+    try { if (EXTENDED_FILE) fs.writeFileSync(EXTENDED_FILE, String(extendedAt)); } catch (e) { /* kept in memory */ }
+  });
 }
 
 var Service;
@@ -287,6 +328,12 @@ if (Service) {
     else message.respond({ returnValue: true, subscribed: !!message.isSubscription });   // the list follows
   }, function (message) {
     appSubs.splice(appSubs.indexOf(message), 1);
+  });
+  service.register('status', function (message) {
+    var at = lastExtended();
+    message.respond({ returnValue: true, connected: connected, apps: apps ? apps.length : null,
+      devModeExtended: at ? new Date(at).toISOString() : null, uptime: Math.round(os.uptime()),
+      logFile: LOG_FILE, log: recent.slice(-60) });
   });
   service.register('allowLgHome', function (message) {
     passUntil = Date.now() + ESCAPE_MS;
@@ -320,6 +367,7 @@ if (Service) {
 
   watch();
   keepDevMode();
+  setInterval(keepDevMode, 3600 * 1000);
 } else {
   watch();   // run by hand: node service.js
 }

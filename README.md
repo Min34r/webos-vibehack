@@ -90,11 +90,17 @@ foreground app and, the moment LG's home appears, opens the launcher on top. LG'
   persistent Activity Manager activity starts it again, and it opens the launcher over whatever the
   TV picked (an input, Live TV, LG's home), but not over an app that a remote button such as
   Netflix powered it on into.
-- **Developer Mode session**: the service extends it once a day, as **Extend Session Time** does.
+- **Developer Mode session**: the service extends it, as **Extend Session Time** does, whenever the
+  last extension is 20 hours old by the wall clock (checked at start, each time the launcher shows,
+  and hourly: a timer alone would drift, as timers stop while the TV sleeps).
 - When the service isn't running, Home simply opens LG's home as usual.
 
 Its log is on the TV, readable over the Developer Mode SSH (port 9922, user `prisoner`):
-`/media/developer/apps/usr/palm/services/com.gathin.tvhome.service/service.log`.
+`/media/developer/apps/usr/palm/services/com.gathin.tvhome.service/service.log`. webOS installs that
+folder read-only for the service, so it can only write a log file that's already there; otherwise
+it logs to its private `/tmp`. Either way `luna://com.gathin.tvhome.service/status` returns the
+last 60 lines with its state (connected, app count, last extension), e.g. from the launcher's web
+inspector.
 
 [`home-watch.py`](home-watch.py) is the same watcher for another always-on device on the network,
 from before the service. On a Mac, `TV_HOST=192.168.1.50 ./home-watch-mac.sh` installs it as a

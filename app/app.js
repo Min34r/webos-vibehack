@@ -90,7 +90,10 @@
   var sfx = null;
 
   function soundsOn() {
-    if (!sfx && VOLUME > 0 && window.Spanda) sfx = Spanda.createSpanda({ profile: 'lush', volume: VOLUME });
+    if (sfx || !(VOLUME > 0) || !window.Spanda) return;
+    sfx = Spanda.createSpanda({ profile: 'lush', volume: VOLUME });
+    // Open the audio context soon, so the first key isn't late, but after the screen is up.
+    setTimeout(function () { if (sfx) sfx.resume(); }, 400);
   }
 
   function soundsOff() {
@@ -723,7 +726,13 @@
   }
 
   /** Back from another app (or opened again from the shortcut): replay the entrance, keep the tile. */
+  var lastResume = 0;
+
   function resume() {
+    // Coming back, webOS sends visibilitychange then webOSRelaunch ~25 ms apart: act once.
+    var now = Date.now();
+    if (now - lastResume < 500) return;
+    lastResume = now;
     startHomeWatch();
     watchApps();
     if (editing) finishEdit(false);
