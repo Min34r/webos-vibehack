@@ -183,6 +183,12 @@ to open (tile colours are sampled on CPU canvases: GPU read-backs took ~30 ms a 
 Setting `resolution` to `3840x2160` in `appinfo.json` makes `app.js` zoom the layout x2 for native
 4K: sharper text, but 57-58 fps and about 77 MB.
 
+## Privacy
+
+[`docs/privacy-dns.md`](docs/privacy-dns.md) lists what an idle C4 talks to (LG ads and cloud,
+ThinQ, the preloaded apps' telemetry) and how to cut it with a filtering DNS (NextDNS): which
+domains to deny, in tiers, and which to keep (Developer Mode, Content Store, updates, weather).
+
 ## Cleaning up LG's home
 
 For when you do land on it. Names vary a little by webOS version:
