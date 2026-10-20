@@ -299,11 +299,14 @@
    * icons whose corners are transparent. A downscaled sample would blend in the logo.
    */
   function edgeColor(img) {
-    var w = img.naturalWidth, h = img.naturalHeight;
+    // Store icons (130px) are read at full size. Vector tiles (1280x720) have a solid background:
+    // 160px wide is plenty, and spares rasterising each one at full size.
+    var scale = Math.min(1, 160 / img.naturalWidth);
+    var w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
     var c = document.createElement('canvas');
     c.width = w; c.height = h;
     var g = c.getContext('2d');
-    g.drawImage(img, 0, 0);
+    g.drawImage(img, 0, 0, w, h);
     var corner = g.getImageData(2, 2, 1, 1).data;
     return corner[3] > 200 ? corner : g.getImageData(2, Math.floor(h / 2), 1, 1).data;
   }
@@ -457,7 +460,7 @@
     if (key === ambientColor) return;
     ambientColor = key;
     var back = ambients[1 - ambientFront];
-    back.style.background = 'radial-gradient(circle 1190px at 32% 42%, rgba(' + key + ',0.36) 0%, rgba(' +
+    back.style.background = 'radial-gradient(circle 297.5px at 32% 42%, rgba(' + key + ',0.36) 0%, rgba(' +   // 1190px at x4
       key + ',0.15) 50%, rgba(' + key + ',0) 100%)';
     back.style.opacity = '1';
     ambients[ambientFront].style.opacity = '0';
@@ -716,13 +719,30 @@
     focusTile(focused);
   }
 
+  var clockTimer = null;
+
+  /** Behind another app: no clock ticks, and the sound engine's audio stream is suspended. */
+  function pause() {
+    clearInterval(clockTimer);
+    clockTimer = null;
+    if (sfx) sfx.setEnabled(false);
+  }
+
+  function unpause() {
+    if (sfx) sfx.setEnabled(true);
+    if (!clockTimer) clockTimer = setInterval(updateClock, 10000);
+  }
+
   document.addEventListener('webOSRelaunch', resume);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) resume(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) pause();
+    else { unpause(); resume(); }
+  });
 
   applyTitles();
   build();
   updateClock();
-  setInterval(updateClock, 10000);
+  unpause();
   watchNetwork();
   startHomeWatch();
   watchApps();

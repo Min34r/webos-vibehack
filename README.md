@@ -135,6 +135,11 @@ builds those tiles from logos on Wikimedia Commons: add a line for a new app, ru
 
 **4K**: `appinfo.json` asks webOS for a 3840x2160 page and `app.js` zooms the 1920x1080 layout x2,
 so text and logos draw at the panel's resolution. Set `resolution` back to `1920x1080` to undo it.
+Redrawing tiles at 4K on every move cost about 10 fps on a C4, so tiles, the focus glass and the
+title are kept as GPU layers (tiles drawn at their focused size, so they stay sharp), and the
+colour glow is drawn at a quarter size. Moving along the dock went from 48-50 fps to 57-58, for
+about 30 MB more memory in the launcher (~77 MB). Behind another app, the launcher stops its clock
+and suspends its audio.
 
 ## Cleaning up LG's home
 
