@@ -32,5 +32,8 @@ window.CONFIG = {
   columns: 4,
 
   // Interface sounds (remote keys only), from 0 (off) to 1.
-  sounds: 0.5
+  sounds: 0.5,
+
+  // The focused icon tips the way focus came from, with a sweeping highlight. false to turn off.
+  tilt: true
 };

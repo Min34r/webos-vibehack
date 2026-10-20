@@ -106,6 +106,16 @@ inspector.
 from before the service. On a Mac, `TV_HOST=192.168.1.50 ./home-watch-mac.sh` installs it as a
 background service (`./home-watch-mac.sh uninstall` removes it).
 
+## The tvOS look
+
+Closer to an Apple TV than the original layout: 5:3 icons with ~16 px corners, and focus is the
+icon itself growing (x1.12) on a spring over a soft shadow, with no frame. It tips the way focus
+came from and a highlight sweeps across it (`tilt: false` in `config.js` turns that off). The
+status bar is small and top right: round glass buttons (Inputs, Wi-Fi, Settings, LG), named under
+the focused one, then the time. Going below the dock dims the glow, and coming back up returns to
+the dock tile last left. Inter stands in for SF Pro. Measured on a C4: 60 fps on the dock and in
+the status bar, about 51 MB when the launcher opens.
+
 ## App list
 
 The service also subscribes to the TV's app list, which pushes a change only when an app is
@@ -140,7 +150,7 @@ builds those tiles from logos on Wikimedia Commons: add a line for a new app, ru
 `./install.sh`.
 
 **Resolution and speed**: the launcher draws at 1920x1080 and the TV scales it to the panel, as
-LG's own home does. Tiles, the focus glass and the title are GPU layers (tiles drawn at their
+LG's own home does. Tiles, the focus shadow and the title are GPU layers (tiles drawn at their
 focused size, so they stay sharp) and the colour glow is drawn at a quarter size, so moving around
 redraws almost nothing. Behind another app the launcher stops its clock and closes its audio
 context. Measured on a C4: 60 fps along the dock with no late frame, about 44 MB and under half a second
@@ -191,7 +201,7 @@ For when you do land on it. Names vary a little by webOS version:
 ## Credits
 
 The design, layout and app icon come from [tv-vibehack](https://github.com/Gathin23/tv-vibehack)
-by [Gathin](https://github.com/Gathin23). The Outfit font is under the SIL Open Font License
+by [Gathin](https://github.com/Gathin23). The Inter font is under the SIL Open Font License
 ([`app/fonts/OFL.txt`](app/fonts/OFL.txt)). Interface sounds come from
 [spanda](https://github.com/rittikbasu/spanda) (MIT, licence in
 [`app/vendor/spanda.js`](app/vendor/spanda.js)). Glyphs are Material Icons (Apache 2.0). The app

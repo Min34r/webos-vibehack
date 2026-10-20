@@ -1,6 +1,6 @@
 /*
- * tvOS style home for webOS: black, a pinned dock row, an app grid, and one glass highlight that
- * springs between tiles. A port of the Android launcher in ../../launcher.
+ * tvOS style home for webOS: black, a pinned dock row and an app grid, where the focused icon grows
+ * over a shadow. A port of the Android launcher in ../../launcher.
  *
  * webOS does not let third-party apps list installed apps, so sync-apps.py writes them into apps.js.
  */
@@ -13,27 +13,21 @@
   if (SCALE !== 1) document.documentElement.style.zoom = SCALE;
 
   var COLUMNS = Math.max(1, CONFIG.columns || 4);
-  var TILE_W = 360, TILE_H = 202;
+  var TILE_W = 380, TILE_H = 228;   // tvOS icons are 5:3 (400x240 pt)
   var CELL_W = (1920 - 2 * 112) / COLUMNS;
-  var ROW_PITCH = 292;
-  var DOCK_TOP = 708;           // tile top of the dock row: next row peeks in at the bottom
+  var ROW_PITCH = 318;
+  var DOCK_TOP = 690;           // tile top of the dock row: next row peeks in at the bottom
   var DOCK_GAP = 36;            // extra space below the dock
-  var FOCUS_SCALE = 1.1;
-  var GLASS_PAD = 12;           // room for the glass glow around the scaled tile
+  var FOCUS_SCALE = 1.12;       // style.css draws cards at this size
   var VIEW_TOP = 80, VIEW_BOTTOM = 1060;    // area grid rows scroll into (the header hides below the dock)
 
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
-
-  var GREETINGS = [[5, 'Bonne nuit'], [12, 'Bonjour'], [18, 'Bon après-midi'], [22, 'Bonsoir'], [24, 'Bonne nuit']];
-  var DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  var MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre',
-    'octobre', 'novembre', 'décembre'];
 
   var ICON_INPUT = 'M18,7V4c0,-1.1 -0.9,-2 -2,-2H8C6.9,2 6,2.9 6,4v3H5v6l3,6v3h8v-3l3,-6V7H18zM8,4h8v3h-2V5h-1v2h-2V5h-1v2H8V4z';
   var ICON_LIVETV = 'M21,6h-7.59l3.29,-3.29L16,2l-4,4l-4,-4l-0.71,0.71L10.59,6H3c-1.1,0 -2,0.89 -2,2v12c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.89 2,-2V8C23,6.89 22.1,6 21,6zM21,20H3V8h18V20zM9,10v8l7,-4L9,10z';
 
   var $ = function (id) { return document.getElementById(id); };
-  var stage = $('stage'), tilesEl = $('tiles'), glass = $('glass'), hero = $('hero');
+  var stage = $('stage'), tilesEl = $('tiles'), shadow = $('shadow'), hero = $('hero');
   var ambients = [$('ambientA'), $('ambientB')], ambientFront = 0, ambientColor = null;
   var pills = [$('btnInputs'), $('btnWifi'), $('btnSettings'), $('btnLgHome')];
   var panel = $('inputsPanel');
@@ -41,7 +35,8 @@
   var items = [];               // {app, el, color}
   var zone = 'grid';            // 'grid' | 'top' | 'inputs'
   var focused = 0, pillFocus = 0, inputFocus = 0, inputRows = [];
-  var offset = 0, heroShown = false, glassShown = false;
+  var offset = 0, heroShown = false;
+  var lastDock = 0;             // the dock tile focus returns to from the rows below
   var editing = null;           // {item, snapshot} while a tile is being moved
   var headerBottom = null;
 
@@ -239,6 +234,9 @@
       img.onload = function () { paintTile(item, img); };
       img.src = app.icon;
       card.appendChild(img);
+      var sheen = document.createElement('div');
+      sheen.className = 'sheen';
+      card.appendChild(sheen);
       el.appendChild(card);
       var name = document.createElement('div');
       name.className = 'name';
@@ -264,14 +262,6 @@
       it.el.style.top = tileTop(i) + 'px';
       it.el.classList.toggle('dock', rowOf(i) === 0);   // the dock has no labels: the top shelf names it
     });
-
-    var band = $('dockBand');
-    var n = Math.min(COLUMNS, items.length);
-    band.style.display = n ? 'block' : 'none';
-    band.style.left = (tileLeft(0) - 28) + 'px';
-    band.style.top = (DOCK_TOP - 28) + 'px';
-    band.style.width = ((n - 1) * CELL_W + TILE_W + 56) + 'px';
-    band.style.height = (TILE_H + 56) + 'px';
   }
 
   function animateIn() {
@@ -390,21 +380,35 @@
     return rgb.map(function (k) { return Math.round((k + m) * 255); });
   }
 
-  // ---- focus & glass -------------------------------------------------------------------------
+  // ---- focus ---------------------------------------------------------------------------------
+
+  /** Which side focus arrived from, for the icon's tilt; none when it didn't move. */
+  function arrivedFrom(from, to, fromZone) {
+    if (fromZone === 'top') return 'from-top';
+    if (fromZone !== 'grid' || from === to) return '';
+    if (rowOf(from) !== rowOf(to)) return rowOf(to) > rowOf(from) ? 'from-top' : 'from-bottom';
+    return to > from ? 'from-left' : 'from-right';
+  }
 
   function focusTile(i) {
     if (!items.length) return;
     i = Math.max(0, Math.min(i, items.length - 1));
+    var fromZone = zone, from = focused;
     setZone('grid');
-    if (items[focused]) items[focused].el.classList.remove('focused');
+    var prev = items[focused];
+    if (prev) prev.el.classList.remove('focused', 'from-left', 'from-right', 'from-top', 'from-bottom');
     focused = i;
+    var dir = arrivedFrom(from, i, fromZone);
+    if (dir) items[i].el.classList.add(dir);
     items[i].el.classList.add('focused');
 
     var top = tileTop(i), row = rowOf(i);
+    if (row === 0) lastDock = i;
+    document.body.classList.toggle('below', row > 0);
     if (row === 0) {
       offset = 0;
     } else {
-      // Scroll just enough so the whole glass and the name below the tile are visible.
+      // Scroll just enough so the whole grown tile and the name below it are visible.
       if (top - offset + TILE_H + 70 > VIEW_BOTTOM) offset = top + TILE_H + 70 - VIEW_BOTTOM;
       if (top - offset - 24 < VIEW_TOP) offset = top - 24 - VIEW_TOP;
     }
@@ -417,28 +421,29 @@
     }
     document.body.classList.toggle('scrolled', DOCK_TOP - 28 - offset < headerBottom + 24);
 
-    var w = TILE_W * FOCUS_SCALE + 2 * GLASS_PAD, h = TILE_H * FOCUS_SCALE + 2 * GLASS_PAD;
-    var x = tileLeft(i) + TILE_W / 2 - w / 2, y = top + TILE_H / 2 - h / 2;
-    glass.style.width = w + 'px';
-    glass.style.height = h + 'px';
-    glass.style.transform = 'translate(' + x + 'px,' + y + 'px)';
-    if (!glassShown) {
-      // First show: jump there without the spring, then fade in.
-      glass.style.transition = 'none';
-      glass.offsetWidth;   // flush the jump before restoring the transition
-      glass.style.transition = '';
-      glass.style.opacity = '1';
-      glassShown = true;
-    }
+    showShadow(i);
 
     if (row === 0) showHero(items[i]);
     else hideHero();
     setAmbient(items[i].color);   // the glow follows the focused tile in every row
   }
 
-  function hideGlass() {
-    glassShown = false;
-    glass.style.opacity = '0';
+  /** The shared shadow jumps under the newly focused tile, then fades in as the icon grows. */
+  function showShadow(i) {
+    shadow.style.transition = 'none';
+    shadow.style.opacity = '0';
+    shadow.style.transform = 'translate(' + tileLeft(i) + 'px,' + tileTop(i) + 'px) scale(' + FOCUS_SCALE + ')';
+    // Two frames: the jump and the fade must land in different frames, or the fade has no start.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        shadow.style.transition = '';
+        if (zone === 'grid' && focused === i) shadow.style.opacity = '1';
+      });
+    });
+  }
+
+  function hideShadow() {
+    shadow.style.opacity = '0';
   }
 
   function showHero(item) {
@@ -499,7 +504,7 @@
     if (zone === 'top') pills[pillFocus].classList.remove('focused');
     if (zone === 'grid') {
       if (items[focused]) items[focused].el.classList.remove('focused');
-      hideGlass();
+      hideShadow();
     }
     zone = z;
   }
@@ -521,16 +526,11 @@
     return best;
   }
 
-  // ---- top bar -------------------------------------------------------------------------------
+  // ---- status bar ----------------------------------------------------------------------------
 
   function updateClock() {
-    var now = new Date(), h = now.getHours();
-    for (var k = 0; k < GREETINGS.length; k++) {
-      if (h < GREETINGS[k][0]) { $('greeting').textContent = GREETINGS[k][1]; break; }
-    }
-    var m = now.getMinutes();
-    $('clock').textContent = h + ':' + (m < 10 ? '0' : '') + m;
-    $('date').textContent = DAYS[now.getDay()] + '  ' + now.getDate() + ' ' + MONTHS[now.getMonth()];
+    var now = new Date(), m = now.getMinutes();
+    $('clock').textContent = now.getHours() + ':' + (m < 10 ? '0' : '') + m;
   }
 
   /** Shows the connection type (not the network name: a long one pushes the LG button off screen). */
@@ -690,7 +690,7 @@
     } else if (zone === 'top') {
       if (k === KEY.LEFT) focusPill(pillFocus - 1);
       else if (k === KEY.RIGHT) focusPill(pillFocus + 1);
-      else if (k === KEY.DOWN) focusTile(rowOf(focused) === 0 ? focused : 0);
+      else if (k === KEY.DOWN) focusTile(lastDock);
       else if (k === KEY.OK) { sound('select'); activatePill(pillFocus); }
       else if (k === KEY.BACK) { /* home screen: Back goes nowhere */ }
       else return;
@@ -700,6 +700,7 @@
       else if (k === KEY.RIGHT) { if (col < COLUMNS - 1 && focused < last) focusTile(focused + 1); }
       else if (k === KEY.UP) {
         if (rowOf(focused) === 0) focusPill(pillAbove(focused));
+        else if (rowOf(focused) === 1) focusTile(lastDock);   // back to where the dock was left
         else focusTile(focused - COLUMNS);
       } else if (k === KEY.DOWN) {
         if (rowOf(focused) < rowOf(last)) focusTile(Math.min(focused + COLUMNS, last));
@@ -764,6 +765,7 @@
     else { unpause(); resume(); }
   });
 
+  document.body.classList.toggle('no-tilt', CONFIG.tilt === false);
   applyTitles();
   build();
   updateClock();

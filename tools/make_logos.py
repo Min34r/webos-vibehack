@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the vector tiles in app/logos/: a brand logo (or a glyph) centred on a solid 16:9 colour.
+"""Build the vector tiles in app/logos/: a brand logo (or a glyph) centred on a solid colour, 5:3 like tvOS icons.
 
 The TV only gives 130px app icons, blurry on a 4K tile. sync-apps.py uses app/logos/<app id>.svg
 instead of the TV's icon whenever one exists. Logos come from Wikimedia Commons.
@@ -20,7 +20,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "app", "logos")
-W, H = 1280, 720
+W, H = 1200, 720   # 5:3, the launcher's tile shape
 
 # app id: (Wikimedia Commons file, background, logo box width, height, colour swaps)
 LOGOS = {
