@@ -7,7 +7,8 @@
 (function () {
   'use strict';
 
-  // Laid out at 1920x1080. appinfo.json asks webOS for a 3840x2160 page on 4K TVs: zoom it to fill.
+  // Laid out at 1920x1080, which the TV scales to its panel. Should appinfo.json ask for a 3840x2160
+  // page instead, zoom the layout x2 to fill it (sharper, but ~30 MB more and a few fps less).
   var SCALE = window.innerWidth >= 3840 ? 2 : 1;
   if (SCALE !== 1) document.documentElement.style.zoom = SCALE;
 
@@ -83,8 +84,18 @@
 
   // Soft, rounded feedback in the spirit of tvOS: spanda's "lush" profile (vendor/spanda.js), a low
   // sine body with a sub-octave, a slow attack and a little room, synthesised with no audio files.
+  // The engine opens its audio context on the first sound, and is dropped behind other apps.
   var VOLUME = CONFIG.sounds == null ? 0.5 : CONFIG.sounds;
-  var sfx = VOLUME > 0 && window.Spanda ? Spanda.createSpanda({ profile: 'lush', volume: VOLUME }) : null;
+  var sfx = null;
+
+  function soundsOn() {
+    if (!sfx && VOLUME > 0 && window.Spanda) sfx = Spanda.createSpanda({ profile: 'lush', volume: VOLUME });
+  }
+
+  function soundsOff() {
+    if (sfx) sfx.destroy();
+    sfx = null;
+  }
 
   var SOUNDS = {
     move: 'type',                                       // focus moved: the faintest tap
@@ -721,15 +732,15 @@
 
   var clockTimer = null;
 
-  /** Behind another app: no clock ticks, and the sound engine's audio stream is suspended. */
+  /** Behind another app: no clock ticks, and the sound engine's audio context is closed. */
   function pause() {
     clearInterval(clockTimer);
     clockTimer = null;
-    if (sfx) sfx.setEnabled(false);
+    soundsOff();
   }
 
   function unpause() {
-    if (sfx) sfx.setEnabled(true);
+    soundsOn();
     if (!clockTimer) clockTimer = setInterval(updateClock, 10000);
   }
 

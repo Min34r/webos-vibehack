@@ -1,5 +1,5 @@
-/* Sizes are the Android launcher's dp values doubled, for a 1920x1080 page. On a 4K TV app.js zooms
-   the page x2 (appinfo.json asks for 3840x2160), so text, icons and SVG logos draw at full resolution. */
+/* Sizes are the Android launcher's dp values doubled, for a 1920x1080 page (zoomed x2 by app.js if
+   appinfo.json asks for 3840x2160). */
 
 @font-face {
   font-family: 'Outfit';
@@ -21,8 +21,8 @@ html, body {
 
 /* ---- ambient glow ---------------------------------------------------------------------------- */
 
-/* A soft gradient needs no resolution: drawn at a quarter size and scaled x4, each layer is a 960x540
-   texture on a 4K TV instead of 3840x2160, so a colour change repaints 16 times fewer pixels. */
+/* A soft gradient needs no resolution: drawn at a quarter size and scaled x4, a colour change
+   repaints 16 times fewer pixels. */
 .ambient {
   position: absolute;
   left: 0;
@@ -50,7 +50,7 @@ html, body {
   opacity: 0;
   transition: opacity 260ms ease, transform 200ms ease;
   pointer-events: none;
-  will-change: transform;   /* its fades no longer repaint the 4K page under it */
+  will-change: transform;   /* its fades no longer repaint the page under it */
 }
 
 /* ---- header ---------------------------------------------------------------------------------- */
@@ -200,7 +200,7 @@ body.scrolled header {
 body.editing #glass { opacity: 0 !important; }
 
 /* Each card is its own compositor layer (will-change), so focusing one only moves pixels the GPU
-   already has: redrawing tiles at 4K on every move cost ~10 fps. A layer keeps the resolution it
+   already has instead of redrawing tiles on every move. A layer keeps the resolution it
    was drawn at, so cards are drawn at their focused size (360x202 x1.1) and shrunk when idle:
    shrinking stays sharp where enlarging would blur. The negative margins keep a 360x202 footprint. */
 .card {

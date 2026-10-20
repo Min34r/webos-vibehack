@@ -9,7 +9,7 @@
   "largeIcon": "largeIcon.png",
   "bgColor": "#000000",
   "iconColor": "#000000",
-  "resolution": "3840x2160",
+  "resolution": "1920x1080",
   "disableBackHistoryAPI": true,
   "requiredACG": ["application.launcher", "network.query", "activity.operation"]
 }

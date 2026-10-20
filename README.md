@@ -14,7 +14,7 @@ This fork of [OmkarK97/webos-vibehack](https://github.com/OmkarK97/webos-vibehac
   launcher's package, and starts on its own after a reboot, even from a cold start.
 - **No Developer Mode expiry**: the same service extends the Developer Mode session once a day.
 - **Apps sync on the TV**: apps you install or remove show up in the launcher by themselves.
-- **4K**: the launcher renders at 3840x2160, and tiles use vector logos instead of the TV's 130px icons.
+- **Sharp, smooth tiles**: vector logos instead of the TV's 130px icons, and 60 fps navigation.
 - **Sounds**: soft interface sounds on the remote's keys.
 - **An LG button**, a French interface and renamable tiles.
 
@@ -128,18 +128,18 @@ Changing `dockApps` resets an order arranged on the TV.
 picking a tile up and putting it down. They are synthesised with
 [spanda](https://github.com/rittikbasu/spanda)'s "lush" profile, so there are no audio files.
 
-**Logos**: the TV only hands out 130px icons, blurry on a 4K tile. `sync-apps.py` uses
+**Logos**: the TV only hands out 130px icons, blurry once scaled up to a tile. `sync-apps.py` uses
 `app/logos/<app id>.svg` instead whenever it exists. [`tools/make_logos.py`](tools/make_logos.py)
 builds those tiles from logos on Wikimedia Commons: add a line for a new app, run it, then
 `./install.sh`.
 
-**4K**: `appinfo.json` asks webOS for a 3840x2160 page and `app.js` zooms the 1920x1080 layout x2,
-so text and logos draw at the panel's resolution. Set `resolution` back to `1920x1080` to undo it.
-Redrawing tiles at 4K on every move cost about 10 fps on a C4, so tiles, the focus glass and the
-title are kept as GPU layers (tiles drawn at their focused size, so they stay sharp), and the
-colour glow is drawn at a quarter size. Moving along the dock went from 48-50 fps to 57-58, for
-about 30 MB more memory in the launcher (~77 MB). Behind another app, the launcher stops its clock
-and suspends its audio.
+**Resolution and speed**: the launcher draws at 1920x1080 and the TV scales it to the panel, as
+LG's own home does. Tiles, the focus glass and the title are GPU layers (tiles drawn at their
+focused size, so they stay sharp) and the colour glow is drawn at a quarter size, so moving around
+redraws almost nothing. Behind another app the launcher stops its clock and closes its audio
+context. Measured on a C4: 60 fps along the dock with no late frame, about 44 MB when it opens.
+Setting `resolution` to `3840x2160` in `appinfo.json` makes `app.js` zoom the layout x2 for native
+4K: sharper text, but 57-58 fps and about 77 MB.
 
 ## Cleaning up LG's home
 
