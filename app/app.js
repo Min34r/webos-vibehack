@@ -571,8 +571,9 @@
 
   function isInputOrTv(id) { return /^com\.webos\.app\.(hdmi\d+|livetv)$/.test(id); }
 
-  /** The name to resume an app or input by, or null for apps hidden in config.js. */
+  /** The name to resume an app by: null for HDMI inputs (they have device buttons) and hidden apps. */
   function resumeTitle(id) {
+    if (/^com\.webos\.app\.hdmi\d+$/.test(id)) return null;
     var data = window.TV_APPS || {}, title = null;
     (data.inputs || []).forEach(function (i) { if (i.appId === id) title = i.label; });
     (data.apps || []).forEach(function (a) { if (a.id === id && !title) title = a.title; });
@@ -586,7 +587,9 @@
     var resume = context.lastApp && resumeTitle(context.lastApp);
     if (resume) list.push({ appId: context.lastApp, label: 'Reprendre ' + resume, left: true });
     (context.devices || []).forEach(function (d) {
-      if (d.appId !== context.lastApp) list.push({ appId: d.appId, label: resumeTitle(d.appId) || d.label, dot: true });
+      var label = d.label;
+      ((window.TV_APPS || {}).inputs || []).forEach(function (i) { if (i.appId === d.appId) label = i.label; });
+      list.push({ appId: d.appId, label: label, dot: true });
     });
     var key = JSON.stringify(list);
     if (key === shelfKey) return;

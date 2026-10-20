@@ -129,8 +129,9 @@ Above the dock, where tvOS shows an app's top shelf (webOS gives no access to ap
 - **The weather** for the place set in `config.js` (`weather: {city: 'Paris'}`, or `null` to hide
   it), from [Open-Meteo](https://open-meteo.com): free, no account, and only the place's
   coordinates are sent. The service asks only when the launcher shows, at most every 30 minutes.
-- **Resume**: "Reprendre Netflix" relaunches the last app or input used. The service sees which
-  app comes to the front; the launcher keeps a copy so it survives a power cut.
+- **Resume**: "Reprendre Netflix" relaunches the last app used (or Live TV). The service sees which
+  app comes to the front; the launcher keeps a copy so it survives a power cut. HDMI inputs don't
+  count: they have device buttons, and a console switched on takes the TV to its input by itself.
 - **Devices that are on**: an HDMI device the TV reports as connected gets a button with a lit
   dot, which switches to it. The service subscribes to the TV's input list, so this (and renamed
   inputs) updates live.

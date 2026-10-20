@@ -207,10 +207,15 @@ function pushContext(message) {
 
 function contextChanged() { contextSubs.forEach(pushContext); }
 
-/** Apps worth a "Resume" button: launchable ones, inputs and Live TV, not the homes. */
+/**
+ * Apps worth a "Resume" button: launchable ones and Live TV. Not the homes, and not HDMI inputs:
+ * those get their own button while their device is on (and a console switched on takes the TV to
+ * its input by itself, which would push the last real app out).
+ */
 function resumable(app) {
   if (!app || app === LAUNCHER || app === LG_HOME) return false;
-  if (/^com\.webos\.app\.(hdmi\d+|livetv)$/.test(app)) return true;
+  if (/^com\.webos\.app\.hdmi\d+$/.test(app)) return false;
+  if (app === 'com.webos.app.livetv') return true;
   return !!apps && apps.some(function (a) { return a.id === app; });
 }
 
