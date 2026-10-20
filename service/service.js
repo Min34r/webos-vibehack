@@ -3,7 +3,8 @@
 // The launcher starts it at launch; the keepAlive activity stops webOS from closing it when idle.
 // Press Home twice within ESCAPE_MS to stay on LG's home.
 // It also extends the Developer Mode session once a day, as the app's "Extend Session Time" does,
-// and keeps the launcher's app list current as apps are installed or removed.
+// keeps the launcher's app list current as apps are installed or removed, and feeds its top shelf:
+// the last app used, HDMI devices that are on, and the weather.
 var net = require('net');
 var http = require('http');
 var https = require('https');
@@ -187,6 +188,84 @@ function pushApps(message) {
   finish();
 }
 
+// ---- top shelf context ---------------------------------------------------------------------
+// What the launcher shows above its dock, pushed to its 'context' subscriptions when it changes:
+// the last app used (to resume it), HDMI devices that are on, and the weather.
+
+var LAST_FILE = writable('last-app');
+var lastApp = null;
+try { lastApp = fs.readFileSync(LAST_FILE, 'utf8').trim() || null; } catch (e) { /* none yet */ }
+var weather = null;      // {place, temp, code, day}
+var contextSubs = [];
+
+function pushContext(message) {
+  message.respond({
+    returnValue: true, subscribed: true, lastApp: lastApp, weather: weather,
+    devices: (inputs || []).filter(function (d) { return d.connected; })
+  });
+}
+
+function contextChanged() { contextSubs.forEach(pushContext); }
+
+/** Apps worth a "Resume" button: launchable ones, inputs and Live TV, not the homes. */
+function resumable(app) {
+  if (!app || app === LAUNCHER || app === LG_HOME) return false;
+  if (/^com\.webos\.app\.(hdmi\d+|livetv)$/.test(app)) return true;
+  return !!apps && apps.some(function (a) { return a.id === app; });
+}
+
+function noteForeground(app) {
+  if (!resumable(app) || app === lastApp) return;
+  lastApp = app;
+  try { if (LAST_FILE) fs.writeFileSync(LAST_FILE, app); } catch (e) { /* kept in memory */ }
+  contextChanged();
+}
+
+// Weather from Open-Meteo (free, no account): only when the launcher shows, at most every 30 min,
+// so nothing goes out while the TV isn't used. Only the place's coordinates are sent.
+var WEATHER_EVERY_MS = 30 * 60 * 1000;
+var weatherKey = '', weatherAt = 0, places = {};
+
+function getJSON(url, done) {
+  var req = https.get(url, function (res) {
+    var body = '';
+    res.on('data', function (d) { body += d; });
+    res.on('end', function () {
+      try { done(null, JSON.parse(body)); } catch (e) { done(e); }
+    });
+  });
+  req.setTimeout(15000, function () { req.destroy(new Error('timed out')); });
+  req.on('error', function (e) { done(e); });
+}
+
+/** where: {city} or {lat, lon, city} from config.js. */
+function refreshWeather(where) {
+  if (!where || (!where.city && where.lat == null)) return;
+  var key = JSON.stringify(where);
+  if (key === weatherKey && Date.now() - weatherAt < WEATHER_EVERY_MS) return;
+  weatherKey = key;
+  weatherAt = Date.now();   // before the request: launcher resumes in a row ask once
+  var failed = function (why) { log('weather failed:', why); weatherAt = 0; };
+  var fetchAt = function (place) {
+    getJSON('https://api.open-meteo.com/v1/forecast?latitude=' + place.lat + '&longitude=' + place.lon +
+        '&current=temperature_2m,weather_code,is_day&timezone=auto', function (err, d) {
+      if (err || !d || !d.current) return failed(err ? err.message : 'no data');
+      weather = { place: place.name, temp: Math.round(d.current.temperature_2m), code: d.current.weather_code,
+                  day: d.current.is_day === 1 };
+      contextChanged();
+    });
+  };
+  if (where.lat != null) return fetchAt({ lat: where.lat, lon: where.lon, name: where.city || '' });
+  if (places[where.city]) return fetchAt(places[where.city]);
+  getJSON('https://geocoding-api.open-meteo.com/v1/search?count=1&language=fr&name=' + encodeURIComponent(where.city),
+    function (err, d) {
+      var r = !err && d && d.results && d.results[0];
+      if (!r) return failed('place not found: ' + where.city);
+      places[where.city] = { lat: r.latitude, lon: r.longitude, name: r.name };
+      fetchAt(places[where.city]);
+    });
+}
+
 var running = false;
 var connected = false;
 var bootLaunchDone = false;
@@ -211,7 +290,7 @@ function watch() {
       log('connected');
       ws.send({ type: 'subscribe', id: 'fg', uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo', payload: {} });
       ws.send({ type: 'subscribe', id: 'lp', uri: 'ssap://com.webos.applicationManager/listLaunchPoints', payload: {} });
-      ws.send({ type: 'request', id: 'inputs', uri: 'ssap://tv/getExternalInputList', payload: {} });
+      ws.send({ type: 'subscribe', id: 'inputs', uri: 'ssap://tv/getExternalInputList', payload: {} });
       bootCheck = !bootLaunchDone && os.uptime() < BOOT_S;
       bootLaunchDone = true;
       return;
@@ -223,13 +302,17 @@ function watch() {
       return;
     }
     if ((msg.id === 'lp' || msg.id === 'lp-all') && msg.payload) return setApps(msg.payload.launchPoints || []);
-    if (msg.id === 'inputs' && msg.payload) {
-      inputs = (msg.payload.devices || []).filter(function (d) { return d.appId; })
-        .map(function (d) { return { appId: d.appId, label: d.label || d.id }; });
+    if (msg.id === 'inputs' && msg.payload && msg.payload.devices) {
+      // A subscription: renamed inputs and devices switched on or off come through too.
+      inputs = msg.payload.devices.filter(function (d) { return d.appId; })
+        .map(function (d) { return { appId: d.appId, label: d.label || d.id, connected: !!d.connected }; });
+      appSubs.forEach(pushApps);
+      contextChanged();
       return;
     }
     if (msg.id !== 'fg' || !msg.payload) return;
     var app = msg.payload.appId || '';
+    noteForeground(app);
     if (bootCheck) {
       bootCheck = false;
       if (BOOT_TAKEOVER.test(app)) {
@@ -328,6 +411,13 @@ if (Service) {
     else message.respond({ returnValue: true, subscribed: !!message.isSubscription });   // the list follows
   }, function (message) {
     appSubs.splice(appSubs.indexOf(message), 1);
+  });
+  service.register('context', function (message) {
+    if (message.isSubscription) contextSubs.push(message);
+    refreshWeather(message.payload.weather);
+    pushContext(message);
+  }, function (message) {
+    contextSubs.splice(contextSubs.indexOf(message), 1);
   });
   service.register('status', function (message) {
     var at = lastExtended();

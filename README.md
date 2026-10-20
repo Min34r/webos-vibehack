@@ -122,6 +122,21 @@ core even at rest. Going below the dock dims the backdrop, and coming back up re
 the dock tile last left. Inter stands in for SF Pro. Measured on a C4: 60 fps on the dock and in
 the status bar, about 51 MB when the launcher opens.
 
+## Top shelf
+
+Above the dock, where tvOS shows an app's top shelf (webOS gives no access to apps' content):
+
+- **The weather** for the place set in `config.js` (`weather: {city: 'Paris'}`, or `null` to hide
+  it), from [Open-Meteo](https://open-meteo.com): free, no account, and only the place's
+  coordinates are sent. The service asks only when the launcher shows, at most every 30 minutes.
+- **Resume**: "Reprendre Netflix" relaunches the last app or input used. The service sees which
+  app comes to the front; the launcher keeps a copy so it survives a power cut.
+- **Devices that are on**: an HDMI device the TV reports as connected gets a button with a lit
+  dot, which switches to it. The service subscribes to the TV's input list, so this (and renamed
+  inputs) updates live.
+
+From the dock, Up goes to that row, and Up again to the status bar.
+
 ## App list
 
 The service also subscribes to the TV's app list, which pushes a change only when an app is

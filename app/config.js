@@ -25,6 +25,10 @@ window.CONFIG = {
     'com.webos.app.hdmi3': 'Switch 2'
   },
 
+  // Weather above the dock, from Open-Meteo (free, no account; only the place's coordinates are
+  // sent). A city name, or {lat: 48.85, lon: 2.35, city: 'Paris'}. null to hide it.
+  weather: { city: 'Paris' },
+
   // The Live TV app, offered at the end of the Inputs menu. Leave empty to omit.
   liveTvApp: 'com.webos.app.livetv',
 

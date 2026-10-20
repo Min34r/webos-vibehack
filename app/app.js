@@ -24,6 +24,7 @@
 
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
 
+  var ICON_PLAY = 'M8,5v14l11,-7z';
   var ICON_INPUT = 'M18,7V4c0,-1.1 -0.9,-2 -2,-2H8C6.9,2 6,2.9 6,4v3H5v6l3,6v3h8v-3l3,-6V7H18zM8,4h8v3h-2V5h-1v2h-2V5h-1v2H8V4z';
   var ICON_LIVETV = 'M21,6h-7.59l3.29,-3.29L16,2l-4,4l-4,-4l-0.71,0.71L10.59,6H3c-1.1,0 -2,0.89 -2,2v12c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.89 2,-2V8C23,6.89 22.1,6 21,6zM21,20H3V8h18V20zM9,10v8l7,-4L9,10z';
 
@@ -36,6 +37,7 @@
   var items = [];               // {app, el, color}
   var zone = 'grid';            // 'grid' | 'top' | 'inputs'
   var focused = 0, pillFocus = 0, inputFocus = 0, inputRows = [];
+  var shelfItems = [], shelfFocus = 0;   // top shelf buttons: {appId, label, el}
   var offset = 0;
   var lastDock = 0;             // the dock tile focus returns to from the rows below
   var editing = null;           // {item, snapshot} while a tile is being moved
@@ -388,7 +390,7 @@
 
   /** Which side focus arrived from, for the icon's tilt; none when it didn't move. */
   function arrivedFrom(from, to, fromZone) {
-    if (fromZone === 'top') return 'from-top';
+    if (fromZone === 'top' || fromZone === 'shelf') return 'from-top';
     if (fromZone !== 'grid' || from === to) return '';
     if (rowOf(from) !== rowOf(to)) return rowOf(to) > rowOf(from) ? 'from-top' : 'from-bottom';
     return to > from ? 'from-left' : 'from-right';
@@ -527,6 +529,7 @@
   function setZone(z) {
     if (zone === z) return;
     if (zone === 'top') pills[pillFocus].classList.remove('focused');
+    if (zone === 'shelf' && shelfItems[shelfFocus]) shelfItems[shelfFocus].el.classList.remove('focused');
     if (zone === 'grid') {
       if (items[focused]) items[focused].el.classList.remove('focused');
       hideShadow();
@@ -540,15 +543,151 @@
     return { left: r.left / SCALE, top: r.top / SCALE, width: r.width / SCALE, bottom: r.bottom / SCALE };
   }
 
-  /** The pill straight above a dock tile, by horizontal distance. */
-  function pillAbove(i) {
-    var cx = tileLeft(i) + TILE_W / 2, best = 0, bestD = Infinity;
-    pills.forEach(function (p, k) {
-      var r = pageRect(p);
+  /** The element closest to page x cx, by horizontal distance between centres. */
+  function nearest(els, cx) {
+    var best = 0, bestD = Infinity;
+    els.forEach(function (el, k) {
+      var r = pageRect(el);
       var d = Math.abs(r.left + r.width / 2 - cx);
       if (d < bestD) { bestD = d; best = k; }
     });
     return best;
+  }
+
+  function centreX(el) { var r = pageRect(el); return r.left + r.width / 2; }
+
+  /** The pill straight above a dock tile. */
+  function pillAbove(i) { return nearest(pills, tileLeft(i) + TILE_W / 2); }
+
+  function shelfEls() { return shelfItems.map(function (s) { return s.el; }); }
+
+  // ---- top shelf -----------------------------------------------------------------------------
+
+  // From the service: the last app used, HDMI devices that are on, the weather. The last app is
+  // kept here too, so "Resume" survives a power cut (the service's copy lives in its /tmp).
+  var context = { lastApp: null, devices: [], weather: null };
+  var contextBridge = null, shelfKey = '';
+  try { context.lastApp = localStorage.getItem('tvhome.lastApp'); } catch (e) { /* none */ }
+
+  function isInputOrTv(id) { return /^com\.webos\.app\.(hdmi\d+|livetv)$/.test(id); }
+
+  /** The name to resume an app or input by, or null for apps hidden in config.js. */
+  function resumeTitle(id) {
+    var data = window.TV_APPS || {}, title = null;
+    (data.inputs || []).forEach(function (i) { if (i.appId === id) title = i.label; });
+    (data.apps || []).forEach(function (a) { if (a.id === id && !title) title = a.title; });
+    if (id === CONFIG.liveTvApp && !title) title = 'TV en direct';
+    if (!isInputOrTv(id) && (CONFIG.hiddenApps || []).indexOf(id) >= 0) return null;
+    return title;
+  }
+
+  function renderShelf() {
+    var list = [];
+    var resume = context.lastApp && resumeTitle(context.lastApp);
+    if (resume) list.push({ appId: context.lastApp, label: 'Reprendre ' + resume, left: true });
+    (context.devices || []).forEach(function (d) {
+      if (d.appId !== context.lastApp) list.push({ appId: d.appId, label: resumeTitle(d.appId) || d.label, dot: true });
+    });
+    var key = JSON.stringify(list);
+    if (key === shelfKey) return;
+    shelfKey = key;
+    var wasHere = zone === 'shelf';
+    $('resumeGroup').innerHTML = '';
+    $('deviceGroup').innerHTML = '';
+    shelfItems = list.map(function (it, i) {
+      var b = document.createElement('div');
+      b.className = 'shelfBtn';
+      b.innerHTML = it.dot ? '<span class="dot"></span>' : '<svg viewBox="0 0 24 24"><path d="' + ICON_PLAY + '"/></svg>';
+      b.appendChild(document.createTextNode(it.label));
+      b.addEventListener('mouseover', function () { if (zone !== 'inputs' && !editing) focusShelf(i); });
+      b.addEventListener('click', function () { launch(it.appId, it.label); });
+      $(it.left ? 'resumeGroup' : 'deviceGroup').appendChild(b);
+      it.el = b;
+      return it;
+    });
+    if (wasHere) {
+      zone = 'none';
+      if (shelfItems.length) focusShelf(Math.min(shelfFocus, shelfItems.length - 1));
+      else focusTile(lastDock);
+    }
+  }
+
+  // Weather codes (WMO, as Open-Meteo sends them) to a French label and an icon.
+  var WEATHER = [
+    [[0], 'Ensoleillé', 'clear'], [[1], 'Peu nuageux', 'partly'], [[2], 'Éclaircies', 'partly'],
+    [[3], 'Couvert', 'cloud'], [[45, 48], 'Brouillard', 'fog'], [[51, 53, 55, 56, 57], 'Bruine', 'rain'],
+    [[61, 63, 65, 66, 67], 'Pluie', 'rain'], [[71, 73, 75, 77], 'Neige', 'snow'], [[80, 81, 82], 'Averses', 'rain'],
+    [[85, 86], 'Averses de neige', 'snow'], [[95, 96, 99], 'Orage', 'storm']
+  ];
+
+  // Material icons (Apache 2.0) on a 24x24 grid, combined for partly cloudy, rain and storms.
+  var SUN = 'M6.76,4.84l-1.8,-1.79 -1.41,1.41 1.79,1.79 1.42,-1.41zM4,10.5H1v2h3v-2zM13,0.55h-2V3.5h2V0.55zM20.45,4.46l-1.41,-1.41 -1.79,1.79 1.41,1.41 1.79,-1.79zM17.24,18.16l1.79,1.8 1.41,-1.41 -1.8,-1.79 -1.4,1.4zM20,10.5v2h3v-2h-3zM12,5.5c-3.31,0 -6,2.69 -6,6s2.69,6 6,6 6,-2.69 6,-6 -2.69,-6 -6,-6zM11,22.45h2V19.5h-2v2.95zM3.55,18.54l1.41,1.41 1.79,-1.8 -1.41,-1.41 -1.79,1.8z';
+  var MOON = 'M9,2c-1.05,0 -2.05,0.16 -3,0.46 4.06,1.27 7,5.06 7,9.54 0,4.48 -2.94,8.27 -7,9.54 0.95,0.3 1.95,0.46 3,0.46 5.52,0 10,-4.48 10,-10S14.52,2 9,2z';
+  var CLOUD = 'M19.35,10.04C18.67,6.59 15.64,4 12,4 9.11,4 6.6,5.64 5.35,8.04 2.34,8.36 0,10.91 0,14c0,3.31 2.69,6 6,6h13c2.76,0 5,-2.24 5,-5 0,-2.64 -2.05,-4.78 -4.65,-4.96z';
+  var SNOW = 'M22,11h-4.17l3.24,-3.24 -1.41,-1.42L15,11h-2V9l4.66,-4.66 -1.42,-1.41L13,6.17V2h-2v4.17L7.76,2.93 6.34,4.34 11,9v2H9L4.34,6.34 2.93,7.76 6.17,11H2v2h4.17l-3.24,3.24 1.41,1.42L9,13h2v2l-4.66,4.66 1.42,1.41L11,17.83V22h2v-4.17l3.24,3.24 1.42,-1.41L13,15v-2h2l4.66,4.66 1.41,-1.42L17.83,13H22z';
+
+  function weatherIcon(kind, day) {
+    var p = function (d, t) { return '<path d="' + d + '"' + (t ? ' transform="' + t + '"' : '') + '/>'; };
+    var lines = function (d) { return '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="1.6" stroke-linecap="round"/>'; };
+    var body = {
+      clear: p(day ? SUN : MOON),
+      partly: p(day ? SUN : MOON, 'translate(-1,-2) scale(0.62)') + p(CLOUD, 'translate(4.5,6) scale(0.8)'),
+      cloud: p(CLOUD),
+      fog: lines('M3,8h18M5,12h14M3,16h18'),
+      rain: p(CLOUD, 'translate(1.2,-2) scale(0.9)') + lines('M8,19.5l-1.2,2.6M12,19.5l-1.2,2.6M16,19.5l-1.2,2.6'),
+      snow: p(SNOW),
+      storm: p(CLOUD, 'translate(1.2,-3) scale(0.9)') + p('M13,15l-3.5,5h2.5l-1,3.5 4,-5.5h-2.5l1,-3z')
+    }[kind] || p(CLOUD);
+    return '<svg viewBox="0 0 24 24">' + body + '</svg>';
+  }
+
+  function renderWeather(w) {
+    var el = $('weather');
+    if (!w || !CONFIG.weather) { el.classList.remove('shown'); return; }
+    var label = 'Météo', kind = 'cloud';
+    WEATHER.forEach(function (row) { if (row[0].indexOf(w.code) >= 0) { label = row[1]; kind = row[2]; } });
+    if (kind === 'clear' && !w.day) label = 'Dégagé';
+    el.innerHTML = weatherIcon(kind, w.day);
+    var temp = document.createElement('span');
+    temp.className = 'wTemp';
+    temp.textContent = w.temp + '°';
+    var text = document.createElement('span');
+    text.className = 'wText';
+    var b = document.createElement('b');
+    b.textContent = label;
+    text.appendChild(b);
+    text.appendChild(document.createTextNode(w.place || ''));
+    el.appendChild(temp);
+    el.appendChild(text);
+    el.classList.add('shown');
+  }
+
+  /** (Re)subscribes, like watchApps: a subscription dies with a restarted service. */
+  function watchContext() {
+    if (contextBridge) {
+      try { contextBridge.cancel(); } catch (e) { /* already gone */ }
+      bridges.splice(bridges.indexOf(contextBridge), 1);
+    }
+    contextBridge = luna('luna://com.gathin.tvhome.service/context',
+      { subscribe: true, weather: CONFIG.weather || null }, function (res) {
+        if (res.returnValue === false) return;
+        if (res.lastApp && res.lastApp !== context.lastApp) {
+          context.lastApp = res.lastApp;
+          try { localStorage.setItem('tvhome.lastApp', res.lastApp); } catch (e) { /* kept for now */ }
+        }
+        context.devices = res.devices || [];
+        if (res.weather) context.weather = res.weather;
+        renderShelf();
+        renderWeather(context.weather);
+      });
+  }
+
+  function focusShelf(i) {
+    if (!shelfItems.length) return;
+    setZone('shelf');
+    if (shelfItems[shelfFocus]) shelfItems[shelfFocus].el.classList.remove('focused');
+    shelfFocus = Math.max(0, Math.min(i, shelfItems.length - 1));
+    shelfItems[shelfFocus].el.classList.add('focused');
   }
 
   // ---- status bar ----------------------------------------------------------------------------
@@ -691,7 +830,7 @@
   });
 
   /** Where focus is: an arrow that leaves this unchanged hit an edge. */
-  function focusState() { return zone + focused + '/' + pillFocus + '/' + inputFocus; }
+  function focusState() { return zone + focused + '/' + pillFocus + '/' + inputFocus + '/' + shelfFocus; }
 
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode;
@@ -712,10 +851,21 @@
       else if (k === KEY.OK) { var row = inputRows[inputFocus]; hideInputs(); sound('select'); launch(row.appId, row.label); }
       else if (k === KEY.BACK || k === KEY.ESC || k === KEY.LEFT || k === KEY.RIGHT) hideInputs();
       else return;
+    } else if (zone === 'shelf') {
+      if (k === KEY.LEFT) focusShelf(shelfFocus - 1);
+      else if (k === KEY.RIGHT) focusShelf(shelfFocus + 1);
+      else if (k === KEY.UP) focusPill(nearest(pills, centreX(shelfItems[shelfFocus].el)));
+      else if (k === KEY.DOWN) focusTile(lastDock);
+      else if (k === KEY.OK) { sound('select'); var s = shelfItems[shelfFocus]; launch(s.appId, s.label); }
+      else if (k === KEY.BACK) { /* home screen: Back goes nowhere */ }
+      else return;
     } else if (zone === 'top') {
       if (k === KEY.LEFT) focusPill(pillFocus - 1);
       else if (k === KEY.RIGHT) focusPill(pillFocus + 1);
-      else if (k === KEY.DOWN) focusTile(lastDock);
+      else if (k === KEY.DOWN) {
+        if (shelfItems.length) focusShelf(nearest(shelfEls(), centreX(pills[pillFocus])));
+        else focusTile(lastDock);
+      }
       else if (k === KEY.OK) { sound('select'); activatePill(pillFocus); }
       else if (k === KEY.BACK) { /* home screen: Back goes nowhere */ }
       else return;
@@ -724,7 +874,10 @@
       if (k === KEY.LEFT) { if (col > 0) focusTile(focused - 1); }
       else if (k === KEY.RIGHT) { if (col < COLUMNS - 1 && focused < last) focusTile(focused + 1); }
       else if (k === KEY.UP) {
-        if (rowOf(focused) === 0) focusPill(pillAbove(focused));
+        if (rowOf(focused) === 0) {
+          if (shelfItems.length) focusShelf(nearest(shelfEls(), tileLeft(focused) + TILE_W / 2));
+          else focusPill(pillAbove(focused));
+        }
         else if (rowOf(focused) === 1) focusTile(lastDock);   // back to where the dock was left
         else focusTile(focused - COLUMNS);
       } else if (k === KEY.DOWN) {
@@ -761,7 +914,9 @@
     lastResume = now;
     startHomeWatch();
     watchApps();
+    watchContext();
     if (editing) finishEdit(false);
+    if (shelfItems[shelfFocus]) shelfItems[shelfFocus].el.classList.remove('focused');
     updateClock();
     if (zone === 'inputs') panel.classList.add('hidden');
     pills.forEach(function (p) { p.classList.remove('focused'); });
@@ -800,6 +955,8 @@
   watchNetwork();
   startHomeWatch();
   watchApps();
+  renderShelf();
+  watchContext();
   animateIn();
   zone = 'none';
   focusTile(0);
