@@ -244,15 +244,17 @@ body.scrolled header {
 
 .shelfBtn svg { width: 30px; height: 30px; margin-right: 14px; fill: currentColor; }
 
-/* A device that is on: a small lit dot. */
-.shelfBtn .dot {
+/* A device that is on: a small lit dot, on its shelf button and in the Inputs menu. */
+.dot {
+  flex: none;
   width: 12px;
   height: 12px;
-  margin-right: 14px;
   border-radius: 50%;
   background: #34c759;
   box-shadow: 0 0 10px rgba(52, 199, 89, 0.7);
 }
+
+.shelfBtn .dot { margin-right: 14px; }
 
 .shelfBtn.focused {
   background: rgba(255, 255, 255, 0.96);
@@ -410,6 +412,10 @@ body.no-tilt .item.focused .card, body.no-tilt .item.focused .sheen { animation:
 }
 
 .inputRow svg { width: 40px; height: 40px; margin-right: 20px; fill: currentColor; }
+
+.inputRow .label { flex: 1; }
+
+.inputRow .dot { margin-left: 28px; }
 
 .inputRow.focused { background: rgba(255, 255, 255, 0.96); color: #000; }
 

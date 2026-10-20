@@ -732,7 +732,9 @@
     panel.innerHTML = '';
     inputRows = [];
     var inputs = (window.TV_APPS && TV_APPS.inputs) || [];
-    inputs.forEach(function (inp) { addInputRow(ICON_INPUT, inp.label, inp.appId); });
+    var on = {};
+    (context.devices || []).forEach(function (d) { on[d.appId] = true; });
+    inputs.forEach(function (inp) { addInputRow(ICON_INPUT, inp.label, inp.appId, on[inp.appId]); });
     if (CONFIG.liveTvApp) {
       if (inputRows.length) panel.appendChild(Object.assign(document.createElement('div'), { className: 'separator' }));
       addInputRow(ICON_LIVETV, 'TV en direct', CONFIG.liveTvApp);
@@ -750,11 +752,16 @@
     focusInput(0);
   }
 
-  function addInputRow(icon, label, appId) {
+  /** A row of the Inputs menu; a device that is on gets the shelf's lit dot at its end. */
+  function addInputRow(icon, label, appId, on) {
     var row = document.createElement('div');
     row.className = 'inputRow';
     row.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icon + '"/></svg>';
-    row.appendChild(document.createTextNode(label));
+    var text = document.createElement('span');
+    text.className = 'label';
+    text.textContent = label;
+    row.appendChild(text);
+    if (on) row.appendChild(Object.assign(document.createElement('span'), { className: 'dot' }));
     var idx = inputRows.length;
     row.addEventListener('mouseover', function () { focusInput(idx); });
     row.addEventListener('click', function () { hideInputs(); launch(appId, label); });
