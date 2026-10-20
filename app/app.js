@@ -971,19 +971,26 @@
     focusTile(focused);
   }
 
-  var clockTimer = null;
+  var clockTimer = null, weatherTimer = null;
 
-  /** Behind another app: no clock ticks, and the sound engine's audio context is closed. */
+  /** While on screen, asks the service to refresh the weather; it goes out only if 15 min old. */
+  function pokeWeather() {
+    if (CONFIG.weather) luna('luna://com.gathin.tvhome.service/context', { weather: CONFIG.weather });
+  }
+
+  /** Behind another app: no clock or weather ticks, and the sound engine's audio context is closed. */
   function pause() {
     hiddenAt = Date.now();
     clearInterval(clockTimer);
-    clockTimer = null;
+    clearInterval(weatherTimer);
+    clockTimer = weatherTimer = null;
     soundsOff();
   }
 
   function unpause() {
     soundsOn();
     if (!clockTimer) clockTimer = setInterval(updateClock, 10000);
+    if (!weatherTimer) weatherTimer = setInterval(pokeWeather, 5 * 60 * 1000);
   }
 
   document.addEventListener('webOSRelaunch', resume);

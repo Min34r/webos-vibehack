@@ -131,7 +131,8 @@ Above the dock, where tvOS shows an app's top shelf (webOS gives no access to ap
 
 - **The weather** for the place set in `config.js` (`weather: {city: 'Paris'}`, or `null` to hide
   it), from [Open-Meteo](https://open-meteo.com): free, no account, and only the place's
-  coordinates are sent. The service asks only when the launcher shows, at most every 30 minutes.
+  coordinates are sent. It refreshes every 15 minutes (Open-Meteo's own update rate) while the
+  launcher is on screen, and not at all behind other apps.
 - **Resume**: "Reprendre Netflix" relaunches the last app used (or Live TV). The service sees which
   app comes to the front; the launcher keeps a copy so it survives a power cut. HDMI inputs don't
   count: they have device buttons, and a console switched on takes the TV to its input by itself.

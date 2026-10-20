@@ -226,9 +226,10 @@ function noteForeground(app) {
   contextChanged();
 }
 
-// Weather from Open-Meteo (free, no account): only when the launcher shows, at most every 30 min,
+// Weather from Open-Meteo (free, no account), which updates its current values every 15 minutes:
+// fetched at most that often, and only while the launcher is on screen (it asks every 5 minutes),
 // so nothing goes out while the TV isn't used. Only the place's coordinates are sent.
-var WEATHER_EVERY_MS = 30 * 60 * 1000;
+var WEATHER_EVERY_MS = 15 * 60 * 1000;
 var weatherKey = '', weatherAt = 0, places = {};
 
 function getJSON(url, done) {
@@ -256,7 +257,8 @@ function refreshWeather(where) {
         '&current=temperature_2m,weather_code,is_day&timezone=auto', function (err, d) {
       if (err || !d || !d.current) return failed(err ? err.message : 'no data');
       weather = { place: place.name, temp: Math.round(d.current.temperature_2m), code: d.current.weather_code,
-                  day: d.current.is_day === 1 };
+                  day: d.current.is_day === 1, at: new Date().toISOString() };
+      log('weather: ' + weather.temp + ' deg, code ' + weather.code + ', ' + place.name);
       contextChanged();
     });
   };
@@ -426,7 +428,7 @@ if (Service) {
   });
   service.register('status', function (message) {
     var at = lastExtended();
-    message.respond({ returnValue: true, connected: connected, apps: apps ? apps.length : null,
+    message.respond({ returnValue: true, connected: connected, apps: apps ? apps.length : null, weather: weather,
       devModeExtended: at ? new Date(at).toISOString() : null, uptime: Math.round(os.uptime()),
       logFile: LOG_FILE, log: recent.slice(-60) });
   });
