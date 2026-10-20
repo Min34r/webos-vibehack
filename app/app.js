@@ -83,36 +83,36 @@
 
   // Feedback in the spirit of tvOS's tick, synthesised by spanda (vendor/spanda.js), no audio files.
   // The engine opens its audio context on the first sound, and is dropped behind other apps.
-  var VOLUME = CONFIG.sounds == null ? 0.3 : CONFIG.sounds;
+  var VOLUME = CONFIG.sounds == null ? 0.28 : CONFIG.sounds;
   var sfx = null;
 
-  // "glass", the default: a soft tap between spanda's "lush" (104 Hz plus a 52 Hz sub under a 520 Hz
-  // low-pass: on TV speakers, a knock behind your head) and a bright 620 Hz tap (too clear). A sine
-  // body around 330 Hz with a little sub-octave, low-passed at 1.4 kHz, a soft attack, a short
-  // tail, a barely-there ping and a little room. config.js soundStyle can pick spanda's own
-  // profiles instead: 'tactile', 'crisp' or 'lush'.
-  var GLASS = {
-    baseFrequency: 330,
-    decayMs: 60,
-    attackMs: 4,
+  // "tick", the default: tvOS's move sound is a soft, matte, short tick with almost no room (values
+  // by ear, Apple doesn't publish them). A ~560 Hz sine with a hint of sub-octave, low-passed at
+  // 2 kHz, a quick attack, a 40 ms tail, a barely-there impact and ping, nearly dry. (spanda's
+  // "lush", 104 Hz plus a 52 Hz sub, knocked like someone behind your head; a 620 Hz glassy tap was
+  // too bright.) config.js soundStyle can pick spanda's own profiles: 'tactile', 'crisp', 'lush'.
+  var TICK = {
+    baseFrequency: 560,
+    decayMs: 40,
+    attackMs: 2,
     waveform: 'sine',
-    bodyLowpass: 1400,
-    transient: { amount: 0.12, frequency: 1800, type: 'lowpass', durationMs: 6 },
-    sub: 0.12,
+    bodyLowpass: 2000,
+    transient: { amount: 0.06, frequency: 2000, type: 'lowpass', durationMs: 5 },
+    sub: 0.06,
     click: 0,
-    ping: 0.08,
-    pingFrequency: 1800,
+    ping: 0.02,
+    pingFrequency: 2400,
     pitchVariationPercent: 2,
-    volumeVariationPercent: 6,
-    reverb: 0.25,
+    volumeVariationPercent: 5,
+    reverb: 0.06,
     layerSpreadMs: 2,
-    completionStyle: 'crisp'
+    completionStyle: 'tactile'
   };
 
   function soundsOn() {
     if (sfx || !(VOLUME > 0) || !window.Spanda) return;
-    var style = CONFIG.soundStyle || 'glass';
-    sfx = Spanda.createSpanda({ profile: style === 'glass' ? GLASS : style, volume: VOLUME });
+    var style = CONFIG.soundStyle || 'tick';
+    sfx = Spanda.createSpanda({ profile: style === 'tick' ? TICK : style, volume: VOLUME });
     // Open the audio context soon, so the first key isn't late, but after the screen is up.
     setTimeout(function () { if (sfx) sfx.resume(); }, 400);
   }
@@ -122,13 +122,18 @@
     sfx = null;
   }
 
+  // One recipe per action. pitch multiplies the profile's frequency, and decay, transient, sub and
+  // reverb multiply its values: with "tick", 560 Hz and 40 ms.
+  var tone = function (pitch, gain, glide, decay, transient) {
+    return { hits: [{ pitch: pitch, gain: gain, glide: glide }], decay: decay, transient: transient, sub: 1, reverb: 1 };
+  };
   var SOUNDS = {
-    move: 'type',                                       // focus moved: the faintest tap
-    bump: { hits: [{ pitch: 0.72, gain: 0.3, glide: 0.92 }], decay: 0.5, reverb: 0.12, transient: 0.08, sub: 0.2 },   // an edge: lower, muted
-    select: 'open',                                     // open an app, a button, an input
-    back: 'close',
-    lift: 'toggleOn',                                   // hold OK: pick a tile up
-    drop: 'toggleOff'                                   // OK: put it down
+    move: tone(1, 0.3, 1, 1, 1),               // focus moved: the most frequent, the most discreet
+    select: tone(0.76, 0.45, 1, 2, 1.67),      // OK: lower and fuller, ~425 Hz, 80 ms
+    back: tone(0.625, 0.38, 0.94, 1.25, 1),    // Back, closing a menu: ~350 Hz, falling, 50 ms
+    bump: tone(0.45, 0.16, 1, 1, 0.5),         // an edge: low, dull and faint (tvOS mostly bounces)
+    lift: tone(0.89, 0.4, 1.03, 1.5, 1),       // hold OK: pick a tile up, rising (3 semitones over drop)
+    drop: tone(0.75, 0.42, 0.97, 1.5, 2)       // OK: put it down, falling, a firmer impact
   };
 
   function sound(name) {
