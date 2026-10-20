@@ -36,11 +36,11 @@ window.CONFIG = {
   columns: 4,
 
   // Interface sounds (remote keys only), from 0 (off) to 1.
-  sounds: 0.28,
+  sounds: 0.15,
 
-  // Their character: 'tick' (a soft, matte tick like tvOS, the default), or spanda's 'tactile',
-  // 'crisp' or 'lush' (low and round).
-  soundStyle: 'tick',
+  // Their character: spanda's 'lush' (soft and round, the default), 'tactile' or 'crisp', or 'tick'
+  // (a matte, higher tvOS-like tick).
+  soundStyle: 'lush',
 
   // The focused icon tips the way focus came from, with a sweeping highlight. false to turn off.
   tilt: true,

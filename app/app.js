@@ -83,7 +83,8 @@
 
   // Feedback in the spirit of tvOS's tick, synthesised by spanda (vendor/spanda.js), no audio files.
   // The engine opens its audio context on the first sound, and is dropped behind other apps.
-  var VOLUME = CONFIG.sounds == null ? 0.28 : CONFIG.sounds;
+  var VOLUME = CONFIG.sounds == null ? 0.15 : CONFIG.sounds;
+  var STYLE = CONFIG.soundStyle || 'lush';
   var sfx = null;
 
   // "tick", the default: tvOS's move sound is a soft, matte, short tick with almost no room (values
@@ -111,8 +112,7 @@
 
   function soundsOn() {
     if (sfx || !(VOLUME > 0) || !window.Spanda) return;
-    var style = CONFIG.soundStyle || 'tick';
-    sfx = Spanda.createSpanda({ profile: style === 'tick' ? TICK : style, volume: VOLUME });
+    sfx = Spanda.createSpanda({ profile: STYLE === 'tick' ? TICK : STYLE, volume: VOLUME });
     // Open the audio context soon, so the first key isn't late, but after the screen is up.
     setTimeout(function () { if (sfx) sfx.resume(); }, 400);
   }
@@ -122,12 +122,23 @@
     sfx = null;
   }
 
-  // One recipe per action. pitch multiplies the profile's frequency, and decay, transient, sub and
-  // reverb multiply its values: with "tick", 560 Hz and 40 ms.
+  // With spanda's profiles ("lush" by default), its own cues, as in its demo; the edge gets a faint
+  // low tap (a heavy sub there knocked like someone behind your head).
+  var SPANDA_SOUNDS = {
+    move: 'type',                              // focus moved: the faintest tap
+    select: 'tap',                             // OK
+    back: 'close',                             // Back, closing a menu
+    bump: { hits: [{ pitch: 0.8, gain: 0.18, glide: 0.97 }], decay: 0.3, transient: 0.3, sub: 0.12, reverb: 0.15 },
+    lift: 'toggleOn',                          // hold OK: pick a tile up
+    drop: 'toggleOff'                          // OK: put it down
+  };
+
+  // With "tick", one recipe per action: pitch multiplies the profile's 560 Hz, and decay, transient,
+  // sub and reverb multiply its values (40 ms...).
   var tone = function (pitch, gain, glide, decay, transient) {
     return { hits: [{ pitch: pitch, gain: gain, glide: glide }], decay: decay, transient: transient, sub: 1, reverb: 1 };
   };
-  var SOUNDS = {
+  var TICK_SOUNDS = {
     move: tone(1, 0.3, 1, 1, 1),               // focus moved: the most frequent, the most discreet
     select: tone(0.76, 0.45, 1, 2, 1.67),      // OK: lower and fuller, ~425 Hz, 80 ms
     back: tone(0.625, 0.38, 0.94, 1.25, 1),    // Back, closing a menu: ~350 Hz, falling, 50 ms
@@ -135,6 +146,8 @@
     lift: tone(0.89, 0.4, 1.03, 1.5, 1),       // hold OK: pick a tile up, rising (3 semitones over drop)
     drop: tone(0.75, 0.42, 0.97, 1.5, 2)       // OK: put it down, falling, a firmer impact
   };
+
+  var SOUNDS = STYLE === 'tick' ? TICK_SOUNDS : SPANDA_SOUNDS;
 
   function sound(name) {
     if (sfx) sfx.play(SOUNDS[name]);
