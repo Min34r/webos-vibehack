@@ -27,8 +27,12 @@ if [ ! -f app/icon.png ]; then
   sips -s format png -z 130 130 assets/icon.jpg --out app/largeIcon.png >/dev/null
 fi
 
+# The on-TV Home watcher (service/) reuses the key sync-apps.py just paired with.
+"$PY" -c "import json,sys; print(json.dumps({'key': json.load(open('.lgtv-key.json'))[sys.argv[1]]}))" \
+  "$TV_HOST" > service/key.json
+
 rm -rf build && mkdir build
-ares package app -o build
+ares package app service -o build
 ares install -d "$DEVICE" build/${APP_ID}_*.ipk
 ares launch -d "$DEVICE" "$APP_ID"
 echo "Installed. Hold a number key on the remote while it is open to make it a one-press shortcut."

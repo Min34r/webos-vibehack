@@ -40,7 +40,13 @@ async def main(host, list_only):
         if p.get("hidden"):
             continue
         url = p.get("largeIcon") if str(p.get("largeIcon", "")).startswith("http") else p.get("icon")
-        name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in p["id"]) + ".png"
+        name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in p["id"])
+        # A vector tile in app/logos/ wins: the TV's icons are 130px, blurry on a 4K tile.
+        if os.path.exists(os.path.join(APP_DIR, "logos", name + ".svg")):
+            apps.append({"id": p["id"], "title": p["title"], "icon": "logos/" + name + ".svg",
+                         "iconColor": p.get("iconColor") or p.get("bgColor") or ""})
+            continue
+        name += ".png"
         try:
             data = urllib.request.urlopen(url, context=ctx, timeout=10).read()
         except Exception as e:

@@ -1,4 +1,5 @@
-/* Sizes are the Android launcher's dp values doubled: webOS renders web apps at 1920x1080. */
+/* Sizes are the Android launcher's dp values doubled, for a 1920x1080 page. On a 4K TV app.js zooms
+   the page x2 (appinfo.json asks for 3840x2160), so text, icons and SVG logos draw at full resolution. */
 
 @font-face {
   font-family: 'Outfit';
@@ -81,6 +82,8 @@ body.scrolled header {
   letter-spacing: -0.04em;
   line-height: 1;
 }
+
+#ampm:empty { display: none; }
 
 #ampm {
   margin: 0 0 16px 12px;

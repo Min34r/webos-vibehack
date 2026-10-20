@@ -7,6 +7,10 @@
 (function () {
   'use strict';
 
+  // Laid out at 1920x1080. appinfo.json asks webOS for a 3840x2160 page on 4K TVs: zoom it to fill.
+  var SCALE = window.innerWidth >= 3840 ? 2 : 1;
+  if (SCALE !== 1) document.documentElement.style.zoom = SCALE;
+
   var COLUMNS = Math.max(1, CONFIG.columns || 4);
   var TILE_W = 360, TILE_H = 202;
   var CELL_W = (1920 - 2 * 112) / COLUMNS;
@@ -19,10 +23,10 @@
 
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
 
-  var GREETINGS = [[5, 'Good night'], [12, 'Good morning'], [17, 'Good afternoon'], [22, 'Good evening'], [24, 'Good night']];
-  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
-    'October', 'November', 'December'];
+  var GREETINGS = [[5, 'Bonne nuit'], [12, 'Bonjour'], [18, 'Bon après-midi'], [22, 'Bonsoir'], [24, 'Bonne nuit']];
+  var DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  var MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre',
+    'octobre', 'novembre', 'décembre'];
 
   var ICON_INPUT = 'M18,7V4c0,-1.1 -0.9,-2 -2,-2H8C6.9,2 6,2.9 6,4v3H5v6l3,6v3h8v-3l3,-6V7H18zM8,4h8v3h-2V5h-1v2h-2V5h-1v2H8V4z';
   var ICON_LIVETV = 'M21,6h-7.59l3.29,-3.29L16,2l-4,4l-4,-4l-0.71,0.71L10.59,6H3c-1.1,0 -2,0.89 -2,2v12c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.89 2,-2V8C23,6.89 22.1,6 21,6zM21,20H3V8h18V20zM9,10v8l7,-4L9,10z';
@@ -30,7 +34,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var stage = $('stage'), tilesEl = $('tiles'), glass = $('glass'), hero = $('hero');
   var ambients = [$('ambientA'), $('ambientB')], ambientFront = 0, ambientColor = null;
-  var pills = [$('btnInputs'), $('btnWifi'), $('btnSettings')];
+  var pills = [$('btnInputs'), $('btnWifi'), $('btnSettings'), $('btnLgHome')];
   var panel = $('inputsPanel');
 
   var items = [];               // {app, el, color}
@@ -61,7 +65,7 @@
 
   function launch(id, title, params) {
     luna('luna://com.webos.applicationManager/launch', { id: id, params: params || {} }, function (res) {
-      if (res.returnValue === false) toast("Can't open " + (title || id));
+      if (res.returnValue === false) toast('Impossible d\'ouvrir ' + (title || id));
     });
   }
 
@@ -74,7 +78,34 @@
     toastTimer = setTimeout(function () { t.classList.remove('shown'); }, 2200);
   }
 
+  // ---- sounds --------------------------------------------------------------------------------
+
+  // Soft, rounded feedback in the spirit of tvOS: spanda's "lush" profile (vendor/spanda.js), a low
+  // sine body with a sub-octave, a slow attack and a little room, synthesised with no audio files.
+  var VOLUME = CONFIG.sounds == null ? 0.5 : CONFIG.sounds;
+  var sfx = VOLUME > 0 && window.Spanda ? Spanda.createSpanda({ profile: 'lush', volume: VOLUME }) : null;
+
+  var SOUNDS = {
+    move: 'type',                                       // focus moved: the faintest tap
+    bump: { hits: [{ pitch: 0.72, gain: 0.34, glide: 0.92 }], decay: 0.5, reverb: 0.12, transient: 0.08, sub: 0.45 },
+    select: 'open',                                     // open an app, a button, an input
+    back: 'close',
+    lift: 'toggleOn',                                   // hold OK: pick a tile up
+    drop: 'toggleOff'                                   // OK: put it down
+  };
+
+  function sound(name) {
+    if (sfx) sfx.play(SOUNDS[name]);
+  }
+
   // ---- apps ----------------------------------------------------------------------------------
+
+  /** config.js titles rename apps and inputs (HDMI inputs are both). */
+  function applyTitles() {
+    var titles = CONFIG.titles || {}, data = window.TV_APPS || {};
+    (data.apps || []).forEach(function (a) { if (titles[a.id]) a.title = titles[a.id]; });
+    (data.inputs || []).forEach(function (i) { if (titles[i.appId]) i.label = titles[i.appId]; });
+  }
 
   function orderedApps() {
     var all = (window.TV_APPS && TV_APPS.apps) || [];
@@ -397,11 +428,17 @@
     zone = z;
   }
 
+  /** An element's box in page (1920x1080) pixels: getBoundingClientRect measures zoomed pixels. */
+  function pageRect(el) {
+    var r = el.getBoundingClientRect();
+    return { left: r.left / SCALE, top: r.top / SCALE, width: r.width / SCALE, bottom: r.bottom / SCALE };
+  }
+
   /** The pill straight above a dock tile, by horizontal distance. */
   function pillAbove(i) {
     var cx = tileLeft(i) + TILE_W / 2, best = 0, bestD = Infinity;
     pills.forEach(function (p, k) {
-      var r = p.getBoundingClientRect();
+      var r = pageRect(p);
       var d = Math.abs(r.left + r.width / 2 - cx);
       if (d < bestD) { bestD = d; best = k; }
     });
@@ -416,19 +453,18 @@
       if (h < GREETINGS[k][0]) { $('greeting').textContent = GREETINGS[k][1]; break; }
     }
     var m = now.getMinutes();
-    $('clock').textContent = ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m;
-    $('ampm').textContent = h < 12 ? 'am' : 'pm';
+    $('clock').textContent = h + ':' + (m < 10 ? '0' : '') + m;
     $('date').textContent = DAYS[now.getDay()] + '  ' + now.getDate() + ' ' + MONTHS[now.getMonth()];
   }
 
-  /** Shows the Wi-Fi network name when the TV reports it, otherwise the connection type. */
+  /** Shows the connection type (not the network name: a long one pushes the LG button off screen). */
   function watchNetwork() {
     luna('luna://com.palm.connectionmanager/getStatus', { subscribe: true }, function (res) {
       if (res.returnValue === false && !res.wifi && !res.wired) return;
       var text = 'Wi-Fi';
       if (res.wired && res.wired.state === 'connected') text = 'Ethernet';
-      else if (res.wifi && res.wifi.state === 'connected') text = res.wifi.ssid || 'Wi-Fi';
-      else if (res.isInternetConnectionAvailable === false) text = 'Offline';
+      else if (res.wifi && res.wifi.state === 'connected') text = 'Wi-Fi';
+      else if (res.isInternetConnectionAvailable === false) text = 'Hors ligne';
       $('wifiLabel').textContent = text;
     });
   }
@@ -436,7 +472,15 @@
   function activatePill(i) {
     if (i === 0) showInputs();
     else if (i === 1) launch('com.palm.app.settings', 'Settings', { target: 'network' });
-    else launch('com.palm.app.settings', 'Settings');
+    else if (i === 2) launch('com.palm.app.settings', 'Settings');
+    else openLgHome();
+  }
+
+  /** The way back to LG's home: the Home watcher lets it through. Works too if the watcher is down. */
+  function openLgHome() {
+    luna('luna://com.gathin.tvhome.service/allowLgHome', {}, function () {
+      launch('com.webos.app.home', 'Accueil LG');
+    });
   }
 
   // ---- inputs dropdown -----------------------------------------------------------------------
@@ -448,12 +492,12 @@
     inputs.forEach(function (inp) { addInputRow(ICON_INPUT, inp.label, inp.appId); });
     if (CONFIG.liveTvApp) {
       if (inputRows.length) panel.appendChild(Object.assign(document.createElement('div'), { className: 'separator' }));
-      addInputRow(ICON_LIVETV, 'Live TV', CONFIG.liveTvApp);
+      addInputRow(ICON_LIVETV, 'TV en direct', CONFIG.liveTvApp);
     }
-    if (!inputRows.length) { toast('No inputs found'); return; }
+    if (!inputRows.length) { toast('Aucune entrée trouvée'); return; }
 
     // Hang right below the Inputs pill, at least as wide as it.
-    var r = pills[0].getBoundingClientRect();
+    var r = pageRect(pills[0]);
     panel.style.left = r.left + 'px';
     panel.style.top = (r.bottom + 20) + 'px';
     panel.style.minWidth = Math.max(r.width, 300) + 'px';
@@ -498,7 +542,8 @@
     editing = { item: it, snapshot: items.slice() };
     it.el.classList.add('moving');
     document.body.classList.add('editing');
-    toast('Arrows to move  ·  OK to place  ·  Back to cancel');
+    sound('lift');
+    toast('Flèches pour déplacer  ·  OK pour placer  ·  Retour pour annuler');
   }
 
   function moveTo(to) {
@@ -519,6 +564,7 @@
     it.el.classList.remove('moving');
     document.body.classList.remove('editing');
     if (keep) saveOrder();
+    sound(keep ? 'drop' : 'back');
     focused = items.indexOf(it);
     focusTile(focused);
   }
@@ -536,13 +582,17 @@
     clearTimeout(okTimer);
     okTimer = null;
     var it = items[focused];
-    if (zone === 'grid' && it && !editing) launch(it.app.id, it.app.title);
+    if (zone === 'grid' && it && !editing) { sound('select'); launch(it.app.id, it.app.title); }
   });
+
+  /** Where focus is: an arrow that leaves this unchanged hit an edge. */
+  function focusState() { return zone + focused + '/' + pillFocus + '/' + inputFocus; }
 
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode;
     if (k === KEY.OK && okDown) { e.preventDefault(); return; }   // key repeat while held
     if (k === KEY.OK) okDown = true;
+    var before = focusState(), arrow = k >= KEY.LEFT && k <= KEY.DOWN, inputsOpen = zone === 'inputs';
     if (editing) {
       if (k === KEY.LEFT) moveTo(focused - 1);
       else if (k === KEY.RIGHT) moveTo(focused + 1);
@@ -554,14 +604,14 @@
     } else if (zone === 'inputs') {
       if (k === KEY.UP) focusInput(inputFocus - 1);
       else if (k === KEY.DOWN) focusInput(inputFocus + 1);
-      else if (k === KEY.OK) { var row = inputRows[inputFocus]; hideInputs(); launch(row.appId, row.label); }
+      else if (k === KEY.OK) { var row = inputRows[inputFocus]; hideInputs(); sound('select'); launch(row.appId, row.label); }
       else if (k === KEY.BACK || k === KEY.ESC || k === KEY.LEFT || k === KEY.RIGHT) hideInputs();
       else return;
     } else if (zone === 'top') {
       if (k === KEY.LEFT) focusPill(pillFocus - 1);
       else if (k === KEY.RIGHT) focusPill(pillFocus + 1);
       else if (k === KEY.DOWN) focusTile(rowOf(focused) === 0 ? focused : 0);
-      else if (k === KEY.OK) activatePill(pillFocus);
+      else if (k === KEY.OK) { sound('select'); activatePill(pillFocus); }
       else if (k === KEY.BACK) { /* home screen: Back goes nowhere */ }
       else return;
     } else {
@@ -578,6 +628,8 @@
       } else if (k === KEY.BACK) { /* home screen: Back goes nowhere */ }
       else return;
     }
+    if (inputsOpen && zone !== 'inputs' && k !== KEY.OK) sound('back');   // closed the Inputs menu
+    else if (arrow) sound(focusState() === before ? 'bump' : 'move');
     e.preventDefault();
   });
 
@@ -588,8 +640,14 @@
 
   // ---- lifecycle -----------------------------------------------------------------------------
 
+  /** Starts the on-TV Home watcher (service/), in case webOS stopped it since. */
+  function startHomeWatch() {
+    luna('luna://com.gathin.tvhome.service/start', {});
+  }
+
   /** Back from another app (or opened again from the shortcut): replay the entrance, keep the tile. */
   function resume() {
+    startHomeWatch();
     if (editing) finishEdit(false);
     updateClock();
     if (zone === 'inputs') panel.classList.add('hidden');
@@ -602,10 +660,12 @@
   document.addEventListener('webOSRelaunch', resume);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) resume(); });
 
+  applyTitles();
   build();
   updateClock();
   setInterval(updateClock, 10000);
   watchNetwork();
+  startHomeWatch();
   animateIn();
   zone = 'none';
   focusTile(0);
