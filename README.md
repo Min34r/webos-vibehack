@@ -182,6 +182,8 @@ Same as the [Android launcher](https://github.com/Gathin23/tv-vibehack#the-launc
 in its colour, the rest of your apps in a grid below, and Inputs (HDMI ports and Live TV),
 Settings and LG (LG's own home) at the top. The header slides away when the grid scrolls into it.
 
+**Magic Remote wheel**: a notch moves like Up or Down, in the grid, the shelf and the menus.
+
 **Rearrange tiles on the TV**: hold **OK** on a tile until it wiggles, move it with the arrows
 (into the top row puts it in the dock), then **OK** to place it or **Back** to cancel. The order is
 saved on the TV.

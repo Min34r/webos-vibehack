@@ -535,11 +535,21 @@
   }
 
   /** Crossfades the glow to a new colour by swapping between two layers. */
+  var AMBIENT_GAP_MS = 300;   // holding an arrow key: one redraw and crossfade every 300 ms at most
+  var ambientAt = 0, ambientTimer = null;
+
   function setAmbient(color) {
     if (!color) return;
+    clearTimeout(ambientTimer);
+    var wait = AMBIENT_GAP_MS - (Date.now() - ambientAt);
+    if (wait > 0) {
+      ambientTimer = setTimeout(function () { setAmbient(color); }, wait);
+      return;
+    }
     var key = color.join(',');
     if (key === ambientColor) return;
     ambientColor = key;
+    ambientAt = Date.now();
     var back = ambients[1 - ambientFront];
     drawBackdrop(back, color);
     back.style.opacity = '1';
@@ -597,6 +607,12 @@
   var context = { lastApp: null, devices: [], weather: null, light: null };
   var contextBridge = null, shelfKey = '';
   try { context.lastApp = localStorage.getItem('tvhome.lastApp'); } catch (e) { /* none */ }
+  // The last weather too, if under 3 h old: it shows at once on a cold start, before the service
+  // (just started, or fetching) answers.
+  try {
+    var cachedWeather = JSON.parse(localStorage.getItem('tvhome.weather'));
+    if (cachedWeather && Date.now() - Date.parse(cachedWeather.at) < 3 * 3600 * 1000) context.weather = cachedWeather;
+  } catch (e) { /* none */ }
 
   function isInputOrTv(id) { return /^com\.webos\.app\.(hdmi\d+|livetv)$/.test(id); }
 
@@ -713,7 +729,12 @@
           try { localStorage.setItem('tvhome.lastApp', res.lastApp); } catch (e) { /* kept for now */ }
         }
         context.devices = res.devices || [];
-        if (res.weather) context.weather = res.weather;
+        if (res.weather) {
+          if (!context.weather || context.weather.at !== res.weather.at) {
+            try { localStorage.setItem('tvhome.weather', JSON.stringify(res.weather)); } catch (e) { /* kept for now */ }
+          }
+          context.weather = res.weather;
+        }
         var lightChanged = JSON.stringify(res.light || null) !== JSON.stringify(context.light);
         context.light = res.light || null;
         refreshPills();
@@ -936,6 +957,16 @@
   /** Where focus is: an arrow that leaves this unchanged hit an edge. */
   function focusState() { return zone + focused + '/' + pillFocus + '/' + inputFocus + '/' + shelfFocus; }
 
+  // The Magic Remote's wheel: one notch moves like Up or Down (so the menus, shelf and grid all
+  // follow, with their sounds), at most one move every 180 ms.
+  var wheelAt = 0;
+  document.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    if (!e.deltaY || Date.now() - wheelAt < 180) return;
+    wheelAt = Date.now();
+    document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: e.deltaY > 0 ? KEY.DOWN : KEY.UP, bubbles: true }));
+  }, { passive: false });
+
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode;
     if (k === KEY.OK && okDown) { e.preventDefault(); return; }   // key repeat while held
@@ -1076,6 +1107,7 @@
   startHomeWatch();
   watchApps();
   renderShelf();
+  renderWeather(context.weather);
   watchContext();
   animateIn();
   zone = 'none';
