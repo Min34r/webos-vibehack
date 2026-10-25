@@ -13,5 +13,7 @@
   "defaultWindowType": "overlay",
   "transparent": true,
   "disableBackHistoryAPI": true,
+  "noSplashOnLaunch": true,
+  "spinnerOnLaunch": true,
   "requiredACG": ["application.launcher", "network.query", "activity.operation"]
 }
