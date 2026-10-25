@@ -23,8 +23,15 @@ PY="${PY:-python3}"
 
 if [ ! -f app/icon.png ]; then
   # The webOS app list wants PNG icons: 80px and 130px.
-  sips -s format png -z 80 80 assets/icon.jpg --out app/icon.png >/dev/null
-  sips -s format png -z 130 130 assets/icon.jpg --out app/largeIcon.png >/dev/null
+  if command -v sips >/dev/null; then
+    sips -s format png -z 80 80 assets/icon.jpg --out app/icon.png >/dev/null
+    sips -s format png -z 130 130 assets/icon.jpg --out app/largeIcon.png >/dev/null
+  elif command -v magick >/dev/null; then
+    magick assets/icon.jpg -resize 80x80 app/icon.png
+    magick assets/icon.jpg -resize 130x130 app/largeIcon.png
+  else
+    "$PY" -c "from PIL import Image; im = Image.open('assets/icon.jpg'); im.resize((80, 80)).save('app/icon.png'); im.resize((130, 130)).save('app/largeIcon.png')"
+  fi
 fi
 
 # The on-TV Home watcher (service/) reuses the key sync-apps.py just paired with.

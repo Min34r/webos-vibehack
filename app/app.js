@@ -24,10 +24,10 @@
 
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
 
-  var GREETINGS = [[5, 'Bonne nuit'], [12, 'Bonjour'], [18, 'Bon après-midi'], [22, 'Bonsoir'], [24, 'Bonne nuit']];
-  var DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  var MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre',
-    'octobre', 'novembre', 'décembre'];
+  var GREETINGS = [[5, 'Chúc ngủ ngon'], [12, 'Chào buổi sáng'], [18, 'Chào buổi chiều'], [22, 'Chào buổi tối'], [24, 'Chúc ngủ ngon']];
+  var DAYS = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  var MONTHS = ['tháng 1', 'tháng 2', 'tháng 3', 'tháng 4', 'tháng 5', 'tháng 6', 'tháng 7', 'tháng 8', 'tháng 9',
+    'tháng 10', 'tháng 11', 'tháng 12'];
 
   var ICON_INPUT = 'M18,7V4c0,-1.1 -0.9,-2 -2,-2H8C6.9,2 6,2.9 6,4v3H5v6l3,6v3h8v-3l3,-6V7H18zM8,4h8v3h-2V5h-1v2h-2V5h-1v2H8V4z';
   var ICON_LIVETV = 'M21,6h-7.59l3.29,-3.29L16,2l-4,4l-4,-4l-0.71,0.71L10.59,6H3c-1.1,0 -2,0.89 -2,2v12c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.89 2,-2V8C23,6.89 22.1,6 21,6zM21,20H3V8h18V20zM9,10v8l7,-4L9,10z';
@@ -66,9 +66,32 @@
     }
   }
 
+  function notifyFreezer(action) {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'http://127.0.0.1:1843/' + action, true);
+      xhr.timeout = 1000;
+      xhr.send();
+    } catch (e) {}
+  }
+
+  function dismissOverlay() {
+    notifyFreezer('unfreeze');
+    try {
+      window.close();
+    } catch (e) {
+      if (window.webOS && window.webOS.platformBack) window.webOS.platformBack();
+    }
+  }
+
   function launch(id, title, params) {
+    notifyFreezer('unfreeze');
     luna('luna://com.webos.applicationManager/launch', { id: id, params: params || {} }, function (res) {
-      if (res.returnValue === false) toast('Impossible d\'ouvrir ' + (title || id));
+      if (res.returnValue === false) {
+        toast('Could not open ' + (title || id));
+      } else {
+        setTimeout(dismissOverlay, 150);
+      }
     });
   }
 
@@ -479,7 +502,7 @@
     if (key === ambientColor) return;
     ambientColor = key;
     var back = ambients[1 - ambientFront];
-    back.style.background = 'radial-gradient(circle 297.5px at 32% 42%, rgba(' + key + ',0.36) 0%, rgba(' +   // 1190px at x4
+    back.style.background = 'radial-gradient(circle 297.5px at 32% 42%, rgba(' + key + ',0.36) 0%, rgba(' +
       key + ',0.15) 50%, rgba(' + key + ',0) 100%)';
     back.style.opacity = '1';
     ambients[ambientFront].style.opacity = '0';
@@ -530,7 +553,7 @@
     }
     var m = now.getMinutes();
     $('clock').textContent = h + ':' + (m < 10 ? '0' : '') + m;
-    $('date').textContent = DAYS[now.getDay()] + '  ' + now.getDate() + ' ' + MONTHS[now.getMonth()];
+    $('date').textContent = DAYS[now.getDay()] + ', ' + now.getDate() + ' ' + MONTHS[now.getMonth()];
   }
 
   /** Shows the connection type (not the network name: a long one pushes the LG button off screen). */
@@ -540,7 +563,7 @@
       var text = 'Wi-Fi';
       if (res.wired && res.wired.state === 'connected') text = 'Ethernet';
       else if (res.wifi && res.wifi.state === 'connected') text = 'Wi-Fi';
-      else if (res.isInternetConnectionAvailable === false) text = 'Hors ligne';
+      else if (res.isInternetConnectionAvailable === false) text = 'Offline';
       $('wifiLabel').textContent = text;
     });
   }
@@ -555,7 +578,7 @@
   /** The way back to LG's home: the Home watcher lets it through. Works too if the watcher is down. */
   function openLgHome() {
     luna('luna://com.gathin.tvhome.service/allowLgHome', {}, function () {
-      launch('com.webos.app.home', 'Accueil LG');
+      launch('com.webos.app.home', 'LG Home');
     });
   }
 
@@ -568,9 +591,9 @@
     inputs.forEach(function (inp) { addInputRow(ICON_INPUT, inp.label, inp.appId); });
     if (CONFIG.liveTvApp) {
       if (inputRows.length) panel.appendChild(Object.assign(document.createElement('div'), { className: 'separator' }));
-      addInputRow(ICON_LIVETV, 'TV en direct', CONFIG.liveTvApp);
+      addInputRow(ICON_LIVETV, 'Live TV', CONFIG.liveTvApp);
     }
-    if (!inputRows.length) { toast('Aucune entrée trouvée'); return; }
+    if (!inputRows.length) { toast('No inputs found'); return; }
 
     // Hang right below the Inputs pill, at least as wide as it.
     var r = pageRect(pills[0]);
@@ -619,7 +642,7 @@
     it.el.classList.add('moving');
     document.body.classList.add('editing');
     sound('lift');
-    toast('Flèches pour déplacer  ·  OK pour placer  ·  Retour pour annuler');
+    toast('Arrows to move  ·  OK to place  ·  Back to cancel');
   }
 
   function moveTo(to) {
@@ -692,7 +715,7 @@
       else if (k === KEY.RIGHT) focusPill(pillFocus + 1);
       else if (k === KEY.DOWN) focusTile(rowOf(focused) === 0 ? focused : 0);
       else if (k === KEY.OK) { sound('select'); activatePill(pillFocus); }
-      else if (k === KEY.BACK) { /* home screen: Back goes nowhere */ }
+      else if (k === KEY.BACK || k === KEY.ESC) { sound('back'); dismissOverlay(); }
       else return;
     } else {
       var col = focused % COLUMNS, last = items.length - 1;
@@ -705,7 +728,7 @@
         if (rowOf(focused) < rowOf(last)) focusTile(Math.min(focused + COLUMNS, last));
       } else if (k === KEY.OK) {
         okTimer = setTimeout(function () { okTimer = null; startEdit(); }, LONG_PRESS_MS);
-      } else if (k === KEY.BACK) { /* home screen: Back goes nowhere */ }
+      } else if (k === KEY.BACK || k === KEY.ESC) { sound('back'); dismissOverlay(); }
       else return;
     }
     if (inputsOpen && zone !== 'inputs' && k !== KEY.OK) sound('back');   // closed the Inputs menu
@@ -729,6 +752,7 @@
   var lastResume = 0;
 
   function resume() {
+    notifyFreezer('freeze');
     // Coming back, webOS sends visibilitychange then webOSRelaunch ~25 ms apart: act once.
     var now = Date.now();
     if (now - lastResume < 500) return;
@@ -748,6 +772,7 @@
 
   /** Behind another app: no clock ticks, and the sound engine's audio context is closed. */
   function pause() {
+    notifyFreezer('unfreeze');
     clearInterval(clockTimer);
     clockTimer = null;
     soundsOff();
@@ -765,6 +790,7 @@
   });
 
   applyTitles();
+  notifyFreezer('freeze');
   build();
   updateClock();
   unpause();

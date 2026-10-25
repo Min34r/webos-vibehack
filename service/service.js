@@ -78,10 +78,9 @@ function connect(onOpen, onMessage, onClose) {
     onClose();
   }
 
-  // The TV closes loopback connections that send no Origin ("invalid origin").
   sock.on('connect', function () {
     sock.write('GET / HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
-      'Origin: http://127.0.0.1\r\nSec-WebSocket-Key: ' + key + '\r\nSec-WebSocket-Version: 13\r\n\r\n');
+      'Sec-WebSocket-Key: ' + key + '\r\nSec-WebSocket-Version: 13\r\n\r\n');
   });
   sock.on('data', function (chunk) {
     buf = Buffer.concat([buf, chunk]);

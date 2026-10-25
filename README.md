@@ -1,199 +1,94 @@
-# webos-vibehack
+# WebOS Overlay Menu & App Hibernation
 
-An Apple TV-style home screen for LG TVs. It's a webOS port of the launcher from
-[tv-vibehack](https://github.com/Gathin23/tv-vibehack), which does the same for Android TVs.
+A clean, Apple TV-inspired custom menu for **rooted LG webOS TVs** that preserves and hibernates active applications instead of killing them.
 
-![The launcher running on an LG OLED C6](docs/screenshot.jpg)
+---
 
-Tested on an LG OLED C6 (OLED55C6XLA, webOS 26, firmware 43.21.79) and an LG OLED C4
-(OLED48C44LA, webOS 24, firmware 43.21.73).
+## The Problem on a Stock TV
+By default, webOS enforces a strict **1 full-screen "card" application limit**. When opening any custom launcher or menu, webOS's System Application Manager (SAM) immediately terminates (`closeApp`) the active app (YouTube, Netflix, Plex, games) to free RAM.
 
-This fork of [OmkarK97/webos-vibehack](https://github.com/OmkarK97/webos-vibehack) adds:
+## The Solution
+1. **Overlay Window Mode**: Configured with `"defaultWindowType": "overlay"` in `appinfo.json`. WebOS renders the menu on top without closing the active card application.
+2. **Dynamic Ambient Glow**: OLED black background (`#000`) with real-time icon color sampling and smooth radial glow crossfades.
+3. **Automated App Freezer (`SIGSTOP` / `SIGCONT`)**:
+   * Opening the menu triggers a local root daemon (`autofreeze.js` on `127.0.0.1:1843`) that sends `SIGSTOP` to the active background app.
+   * Background CPU drops to **0.0%**, audio mutes, and video holds its frame in RAM.
+   * Closing the menu (via `Back`, `Esc`, or selecting an app) triggers `SIGCONT`, resuming playback instantly without reloading.
+4. **Virtual Memory Expansion**: Automatically mounts a 512MB swap file (`/media/internal/swapfile`) at boot to prevent Low Memory Killer (LMK) eviction.
+5. **Key Interception**: Intercepts the remote Menu / Home button via `org.webosbrew.inputhook`.
 
-- **Home without another device**: the Home watcher runs on the TV itself, as a service inside the
-  launcher's package, and starts on its own after a reboot, even from a cold start.
-- **No Developer Mode expiry**: the same service extends the Developer Mode session once a day.
-- **Apps sync on the TV**: apps you install or remove show up in the launcher by themselves.
-- **Sharp, smooth tiles**: vector logos instead of the TV's 130px icons, and 60 fps navigation.
-- **Sounds**: soft interface sounds on the remote's keys.
-- **An LG button**, a French interface and renamable tiles.
+---
 
-## What's different from Android
+## Setup Guide for a New TV
 
-webOS is more locked down than Android TV, so three things work differently:
+### 1. Root & Prep the New TV
+1. Root the TV using [RootMyTV](https://rootmy.tv) or [SlopBro](https://github.com/throwaway96/slopbro) (webOS 4–11).
+2. Install the **Homebrew Channel** (`webosbrew`) and enable **SSH Server** and **Telnet** in its settings.
+3. Verify SSH connection from your computer:
+   ```bash
+   ssh root@<NEW_TV_IP> "uname -a"
+   ```
 
-| | Android TV | LG webOS |
-|---|---|---|
-| Install | ADB, no account | LG's **Developer Mode** app (free LG developer account) |
-| App list | read on the TV | webOS won't let an app list installed apps: `sync-apps.py` bundles them in, then the service keeps the list current |
-| Home button | the launcher *is* Home | webOS always opens LG's home; a service on the TV switches straight back (0.1 to 0.2 s) |
-
-There's no debloat step: webOS has no ADB-style package disabling. Turn off LG's ads in the TV's
-own settings instead (see [Cleaning up LG's home](#cleaning-up-lgs-home)).
-
-Nothing is rooted. Developer Mode is LG's official way to install your own apps, firmware updates
-keep working, and deleting the Developer Mode app removes everything.
-
-## Setup
-
-You need a Mac on the same Wi-Fi as the TV, with Node.js (for LG's `ares` CLI) and Python 3. The
-steps are macOS only for now: `install.sh` makes the app icon with `sips`. Install the CLI once with
-`npm install -g @webos-tools/cli` (`npx` can misread the `-i` option of `ares-setup-device`).
-
-**1. Developer Mode on the TV**
-
-1. Create a free account at [webostv.developer.lge.com](https://webostv.developer.lge.com).
-2. On the TV, install **Developer Mode** from the LG Content Store and sign in.
-3. Turn on **Dev Mode Status** (the TV restarts), open the app again and turn on **Key Server**.
-   Note the **IP address** and **Passphrase** it shows.
-
-**2. Connect your computer** (once)
-
+### 2. Sync App List & Icons
+Run the sync script to pull all installed apps, inputs, and icon graphics from the new TV:
 ```bash
-export TV_HOST=192.168.1.50                       # the IP from the Developer Mode app
-ares-setup-device -a lgtv -i "{'host':'$TV_HOST','port':'9922','username':'prisoner'}"
-ares-novacom --device lgtv --getkey        # type the passphrase
-ares-setup-device -m lgtv -i "{'privatekey':'lgtv_webos','passphrase':'ABC123'}"
+python3 sync-apps.py <NEW_TV_IP>
 ```
 
-**3. Install**
-
+### 3. Build & Deploy Everything
+Run the one-command deployment script:
 ```bash
-git clone https://github.com/simrgt/webos-vibehack.git
-cd webos-vibehack
-python3 -m venv venv && venv/bin/pip install websockets
-TV_HOST=192.168.1.50 ./install.sh
+./deploy-root-daemon.sh <NEW_TV_IP> install
 ```
+This script will:
+* Build the updated overlay `.ipk` package via `@webos-tools/cli`.
+* Install the app on the TV via `luna://com.webos.appInstallService/dev/install`.
+* Deploy and mount the 512MB swap helper to `/var/lib/webosbrew/init.d/80-enable-swap.sh`.
+* Deploy and start the autofreeze daemon to `/var/lib/webosbrew/init.d/85-autofreeze.sh`.
 
-The first run shows an "allow this device?" prompt on the TV: accept it. That pairing lets
-`sync-apps.py` read your apps and icons, and the Home service reuses it. `install.sh` then packages
-the app and its service, installs it and opens it. Apps you install or remove later show up by
-themselves (see [App list](#app-list)); run it again after changing `config.js`, or to give a new
-app a vector logo.
+### 4. Configure Remote Button Mapping
+On the TV, install **Input Hook** (`org.webosbrew.inputhook`) via the Homebrew Channel, then configure your desired shortcut in `/home/root/.config/lginputhook/config.json`:
+```json
+{
+  "125": { "action": "launch", "id": "com.gathin.tvhome" },
+  "773": { "action": "launch", "id": "com.gathin.tvhome" }
+}
+```
+*(Key `125` is the Home button; `773` is Guide / User menu).*
 
-**4. A one-press shortcut**
+---
 
-With the launcher open, hold a number key on the remote (say **1**) and assign it. From then on,
-holding 1 opens the launcher from anywhere.
+## Inspiration & Related Repositories (Ideas to Explore)
 
-## The Home button
+* **[`Gathin23/cleanyourtv`](https://github.com/Gathin23/cleanyourtv)** *(formerly `tv-vibehack`)*:
+  > *"Strip the bloatware from any TV and replace the ad-filled home screen with a clean launcher that looks like an Apple TV."*
+  * **Idea borrowed**: The sleek, minimalist Apple TV UI layout, focused tile scaling, and sound effects profile (`spanda`).
+* **[`zzeppieri/webos-custom-home`](https://github.com/zzeppieri/webos-custom-home)**:
+  > *"An ad-free, minimal custom home screen built for rooted LG webOS TVs with boot autostart and HOME-button takeover."*
+  * **Ideas to explore**: Reading raw `/dev/input/event*` kernel structs directly for zero-delay key listening, and using non-destructive directory bind-mounts to block telemetry and ads.
+* **[`rorygallagher2024/glasshouse`](https://github.com/rorygallagher2024/glasshouse)**:
+  > *"A live local dashboard and control panel for rooted LG webOS TVs with deep system debloating and RAM optimization."*
+  * **Ideas to explore**: Disabling unused background LG store scrapers and telemetry to free up an extra 200MB–400MB of physical RAM; built-in OLED panel care metrics.
+* **[`rudra-avatar/Hearth`](https://github.com/rudra-avatar/Hearth)** *(formerly `webos-custom-launcher`)*:
+  > *"A lightweight custom launcher for older, resource-constrained LG TVs."*
+  * **Ideas to explore**: Mapping the custom launcher as an active TV Input Source rather than an app card for instant wake-on-boot without stock launcher flashes.
 
-webOS hard-wires Home to LG's home, and blocks Developer Mode apps from seeing which app is in front.
-The TV's own remote-control service (the one LG's phone app uses) can, though, and a Developer Mode
-service may connect to it from inside the TV. [`service/`](service/) does that: it watches the
-foreground app and, the moment LG's home appears, opens the launcher on top. LG's home shows for
-0.1 to 0.2 s; holding the number key assigned to the launcher skips it altogether.
+---
 
-- **Press Home twice** within three seconds, or pick **LG** at the top of the launcher, to stay on
-  LG's home, for its menus.
-- **Power on**: from standby the service is still running. From a cold start (the TV unplugged), a
-  persistent Activity Manager activity starts it again, and it opens the launcher over whatever the
-  TV picked (an input, Live TV, LG's home), but not over an app that a remote button such as
-  Netflix powered it on into.
-- **Developer Mode session**: the service extends it, as **Extend Session Time** does, whenever the
-  last extension is 20 hours old by the wall clock (checked at start, each time the launcher shows,
-  and hourly: a timer alone would drift, as timers stop while the TV sleeps).
-- When the service isn't running, Home simply opens LG's home as usual.
+## Controls
+* **Navigate**: D-Pad Arrow Keys
+* **Select**: OK / Wheel Click
+* **Reorder Tiles**: Long-press OK
+* **Dismiss Menu**: `Back` (key 461) or `Esc` (key 27)
 
-Its log is on the TV, readable over the Developer Mode SSH (port 9922, user `prisoner`):
-`/media/developer/apps/usr/palm/services/com.gathin.tvhome.service/service.log`. webOS installs that
-folder read-only for the service, so it can only write a log file that's already there; otherwise
-it logs to its private `/tmp`. Either way `luna://com.gathin.tvhome.service/status` returns the
-last 60 lines with its state (connected, app count, last extension), e.g. from the launcher's web
-inspector.
+## Diagnostics & Status
+```bash
+# Check autofreeze logs
+ssh root@<NEW_TV_IP> "cat /tmp/autofreeze.log"
 
-[`home-watch.py`](home-watch.py) is the same watcher for another always-on device on the network,
-from before the service. On a Mac, `TV_HOST=192.168.1.50 ./home-watch-mac.sh` installs it as a
-background service (`./home-watch-mac.sh uninstall` removes it).
+# Check active swap memory
+ssh root@<NEW_TV_IP> "swapon -s"
 
-## App list
-
-The service also subscribes to the TV's app list, which pushes a change only when an app is
-installed, removed or updated: nothing polls. The launcher opens at once with the list bundled by
-`install.sh`, then asks the service, and rebuilds the grid only when the two differ (an unchanged
-list costs nothing). Bundled logos and icons still win; the service fetches the TV's 130px icon
-only for an app installed since, until `tools/make_logos.py` gives it a logo. Measured on a C4:
-the service stays at about 25 MB and the launcher at about 45 MB, as before.
-
-## Using it
-
-Same as the [Android launcher](https://github.com/Gathin23/tv-vibehack#the-launcher): a dock of four apps with the focused app's name above it and a glow
-in its colour, the rest of your apps in a grid below, and Inputs (HDMI ports and Live TV), Wi-Fi,
-Settings and LG (LG's own home) at the top. The header slides away when the grid scrolls into it.
-
-**Rearrange tiles on the TV**: hold **OK** on a tile until it wiggles, move it with the arrows
-(into the top row puts it in the dock), then **OK** to place it or **Back** to cancel. The order is
-saved on the TV.
-
-**Configure** in [`app/config.js`](app/config.js): the starting dock, apps to hide, names to show
-instead of the TV's (`titles`), the Live TV app, the number of columns and the sound volume
-(`sounds`, 0 to turn them off). App ids come from `venv/bin/python sync-apps.py $TV_HOST --list`.
-Changing `dockApps` resets an order arranged on the TV.
-
-**Sounds**: arrows tick when focus moves and thud at an edge, OK and Back have their own, and so do
-picking a tile up and putting it down. They are synthesised with
-[spanda](https://github.com/rittikbasu/spanda)'s "lush" profile, so there are no audio files.
-
-**Logos**: the TV only hands out 130px icons, blurry once scaled up to a tile. `sync-apps.py` uses
-`app/logos/<app id>.svg` instead whenever it exists. [`tools/make_logos.py`](tools/make_logos.py)
-builds those tiles from logos on Wikimedia Commons: add a line for a new app, run it, then
-`./install.sh`.
-
-**Resolution and speed**: the launcher draws at 1920x1080 and the TV scales it to the panel, as
-LG's own home does. Tiles, the focus glass and the title are GPU layers (tiles drawn at their
-focused size, so they stay sharp) and the colour glow is drawn at a quarter size, so moving around
-redraws almost nothing. Behind another app the launcher stops its clock and closes its audio
-context. Measured on a C4: 60 fps along the dock with no late frame, about 44 MB and under half a second
-to open (tile colours are sampled on CPU canvases: GPU read-backs took ~30 ms a tile).
-Setting `resolution` to `3840x2160` in `appinfo.json` makes `app.js` zoom the layout x2 for native
-4K: sharper text, but 57-58 fps and about 77 MB.
-
-## Cleaning up LG's home
-
-For when you do land on it. Names vary a little by webOS version:
-
-- **Settings → General → System → Additional Settings → Home Settings**: turn off **Home
-  Promotion** and **Content Recommendation**.
-- **Settings → Support → Privacy & Terms → User Agreements**: untick **Viewing Information** and
-  **Interest-Based Recommendations**.
-
-## Troubleshooting
-
-- **Pairing fails with "403 Pairing rejected: blacklisted certificate detected".** Newer firmware
-  rejects the signed manifest that open-source LG clients share. `lgtv.py` pairs with an unsigned
-  one, which still works.
-- **No pairing prompt on the TV.** Turn on the TV's option for connecting from mobile apps (on the
-  C6: Settings → General → Devices → External Devices; named "LG Connect Apps" or similar).
-- **`ares` says "All configured authentication methods failed".** The device profile is missing
-  its key: run the third command in step 2 again.
-- **Apps stop opening after a while.** Developer Mode sessions expire after about 1000 hours. The
-  Home service extends it every day the TV is on; if the TV stayed off longer than that, open the
-  Developer Mode app, sign in again and run `./install.sh`.
-- **Home opens LG's home after a power cut.** Open the launcher once (the number-key shortcut): it
-  starts the service again. The service log says why it stopped.
-
-## Files
-
-| File | What it does |
-|---|---|
-| [`app/`](app/) | The launcher: `index.html`, `style.css`, `app.js`, `config.js`, `appinfo.json` |
-| [`app/logos/`](app/logos/) | Vector tiles that replace the TV's icons, built by `tools/make_logos.py` |
-| [`app/vendor/spanda.js`](app/vendor/spanda.js) | spanda, the interface sound synthesiser (MIT) |
-| [`service/`](service/) | Runs on the TV: the Home watcher, the app list and the Developer Mode keep-alive |
-| [`tools/make_logos.py`](tools/make_logos.py) | Builds `app/logos/` from Wikimedia Commons |
-| [`install.sh`](install.sh) | Syncs your apps, packages and installs the launcher, and opens it |
-| [`sync-apps.py`](sync-apps.py) | Reads apps, icons and HDMI inputs from the TV into `app/apps.js` and `app/icons/` |
-| [`home-watch.py`](home-watch.py) | The Home watcher, for another always-on device |
-| [`home-watch-mac.sh`](home-watch-mac.sh) | Runs the watcher as a macOS background service |
-| [`lgtv.py`](lgtv.py) | Pairs with and talks to the TV's remote-control service |
-| [`assets/icon.jpg`](assets/icon.jpg) | The app icon, resized to PNG by `install.sh` |
-
-## Credits
-
-The design, layout and app icon come from [tv-vibehack](https://github.com/Gathin23/tv-vibehack)
-by [Gathin](https://github.com/Gathin23). The Outfit font is under the SIL Open Font License
-([`app/fonts/OFL.txt`](app/fonts/OFL.txt)). Interface sounds come from
-[spanda](https://github.com/rittikbasu/spanda) (MIT, licence in
-[`app/vendor/spanda.js`](app/vendor/spanda.js)). Glyphs are Material Icons (Apache 2.0). The app
-logos in `app/logos/` are trademarks of their owners, taken from Wikimedia Commons, and only used to
-label the apps installed on your own TV. MIT licensed, see [`LICENSE`](LICENSE).
+# Check daemon status
+ssh root@<NEW_TV_IP> "/var/lib/webosbrew/init.d/85-autofreeze.sh status"
+```

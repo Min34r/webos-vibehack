@@ -1,0 +1,17 @@
+# WebOS Overlay Menu & Freezer Setup (New TV)
+- **Target**: New rooted LG webOS TV (root via RootMyTV/slopbro, install Homebrew Channel + SSH).
+- **Architecture**: Non-terminating overlay + SIGSTOP/SIGCONT background app hibernation + swap.
+- **Related Repos for Ideas**:
+  - `Gathin23/cleanyourtv`: Apple TV UI aesthetics and minimalist home screen philosophy.
+  - `zzeppieri/webos-custom-home`: Raw `/dev/input/event*` kernel key listening & bind-mount debloating.
+  - `rorygallagher2024/glasshouse`: Root control panel, background RAM optimization, button remapping.
+  - `rudra-avatar/Hearth`: TV input source mapping idea and low-spec webOS hardware tuning.
+- **Step 1 - Sync**: `python3 sync-apps.py <NEW_TV_IP>` to extract installed apps & icon assets.
+- **Step 2 - Build**: `npx -y -p @webos-tools/cli ares-package app -o build`
+- **Step 3 - Deploy**: `./deploy-root-daemon.sh <NEW_TV_IP> install` (installs IPK, swap & autofreeze).
+- **Step 4 - Hook Key**: Install `org.webosbrew.inputhook` via HBChannel; map key 125 in `/home/root/.config/lginputhook/`.
+- **How It Works**:
+  - "defaultWindowType": "overlay" in `appinfo.json` stops SAM from killing the foreground app.
+  - `autofreeze.js` (127.0.0.1:1843) sends SIGSTOP on menu open (0% CPU), SIGCONT on Back/Esc (461/27).
+  - `80-enable-swap.sh` adds 512MB swap on `/media/internal/swapfile` to prevent LMK eviction.
+- **Verify**: `ssh root@<NEW_TV_IP> "cat /tmp/autofreeze.log && swapon -s"`
