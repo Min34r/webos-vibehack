@@ -24,47 +24,15 @@
 
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
 
-  var curLocale = 'en';
-  var tr = (window.I18N && window.I18N.en) || {};
+  var lang = (typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en').slice(0, 2).toLowerCase();
+  var i18n = window.I18N || {};
+  var tr = i18n[lang] || i18n.en || {};
 
-  function setLocale(loc) {
-    if (!loc) return;
-    var i18n = window.I18N || {};
-    var code = String(loc).slice(0, 2).toLowerCase();
-    curLocale = i18n[code] ? code : 'en';
-    tr = i18n[curLocale] || i18n.en || {};
+  function initLocale() {
     var elInputs = $('lblInputs');
     if (elInputs && tr.inputs) elInputs.textContent = tr.inputs;
     var elSettings = $('lblSettings');
     if (elSettings && tr.settings) elSettings.textContent = tr.settings;
-    updateClock();
-    updateNetworkLabel();
-  }
-
-  function initLocale() {
-    // 0ms instant cached read from previous runs (zero IPC, zero CPU overhead)
-    var cached = null;
-    try { cached = localStorage.getItem('tvhome.locale'); } catch (e) {}
-    if (cached) {
-      setLocale(cached);
-      return;
-    }
-
-    // Instant synchronous in-memory read from Chromium
-    var lang = (typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en').slice(0, 2).toLowerCase();
-    setLocale(lang);
-    try { localStorage.setItem('tvhome.locale', lang); } catch (e) {}
-
-    // Exactly one one-shot Luna query on very first boot (no polling, no subscription)
-    luna('luna://com.webos.settingsservice/getSystemSettings', { keys: ['localeInfo'] }, function (res) {
-      if (res && res.settings && res.settings.localeInfo && res.settings.localeInfo.locales && res.settings.localeInfo.locales.UI) {
-        var tvLang = res.settings.localeInfo.locales.UI.slice(0, 2).toLowerCase();
-        if (tvLang !== lang) {
-          setLocale(tvLang);
-          try { localStorage.setItem('tvhome.locale', tvLang); } catch (e) {}
-        }
-      }
-    });
   }
 
   var ICON_INPUT = 'M18,7V4c0,-1.1 -0.9,-2 -2,-2H8C6.9,2 6,2.9 6,4v3H5v6l3,6v3h8v-3l3,-6V7H18zM8,4h8v3h-2V5h-1v2h-2V5h-1v2H8V4z';
@@ -573,18 +541,19 @@
 
   // ---- top bar -------------------------------------------------------------------------------
 
+  var GREETINGS = tr.greetings || [];
+  var DAYS = tr.days || [];
+  var MONTHS = tr.months || [];
+
   function updateClock() {
     var now = new Date(), h = now.getHours();
-    var greetings = tr.greetings || [];
-    for (var k = 0; k < greetings.length; k++) {
-      if (h < greetings[k][0]) { $('greeting').textContent = greetings[k][1]; break; }
+    for (var k = 0; k < GREETINGS.length; k++) {
+      if (h < GREETINGS[k][0]) { $('greeting').textContent = GREETINGS[k][1]; break; }
     }
     var m = now.getMinutes();
     $('clock').textContent = h + ':' + (m < 10 ? '0' : '') + m;
-    var days = tr.days || [];
-    var months = tr.months || [];
-    var dayStr = days[now.getDay()] || '';
-    var monthStr = months[now.getMonth()] || '';
+    var dayStr = DAYS[now.getDay()] || '';
+    var monthStr = MONTHS[now.getMonth()] || '';
     $('date').textContent = dayStr + (dayStr ? ', ' : '') + now.getDate() + ' ' + monthStr;
   }
 
@@ -828,8 +797,8 @@
   });
 
   applyTitles();
-  build();
   initLocale();
+  build();
   updateClock();
   unpause();
   watchNetwork();

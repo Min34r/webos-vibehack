@@ -50,6 +50,7 @@ html, body {
   opacity: 0;
   transition: opacity 150ms ease, transform 120ms ease;
   pointer-events: none;
+  will-change: transform, opacity;
 }
 
 /* ---- header ---------------------------------------------------------------------------------- */
@@ -166,6 +167,7 @@ body.scrolled header {
   bottom: 0;
   left: 0;
   transition: transform 160ms ease-out;
+  will-change: transform;
 }
 
 /* The tvOS lighter band behind the dock row. */
@@ -214,6 +216,7 @@ body.editing #glass { opacity: 0 !important; }
   background: #1c1c1e;
   transform: scale(0.90909);
   transition: transform 120ms ease;
+  will-change: transform;
 }
 
 /* Faint rim so black tiles (Apple TV) still read against the black page. */
@@ -279,6 +282,7 @@ body.editing #glass { opacity: 0 !important; }
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease, transform 130ms ease-out;
+  will-change: transform;
 }
 
 /* Bright top specular. */

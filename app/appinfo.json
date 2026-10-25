@@ -14,6 +14,6 @@
   "transparent": true,
   "disableBackHistoryAPI": true,
   "noSplashOnLaunch": true,
-  "spinnerOnLaunch": true,
+  "spinnerOnLaunch": false,
   "requiredACG": ["application.launcher", "network.query", "activity.operation"]
 }
