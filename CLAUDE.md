@@ -1,6 +1,6 @@
 # WebOS Overlay Menu & Setup (New TV)
 - **Target**: LG webOS TV (works Rooted via webosbrew OR Non-Rooted via Developer Mode + Quick Access).
-- **Core Architecture**: Non-killing `"defaultWindowType": "overlay"` + OLED black UI + auto-i18n (`app/i18n.js`).
+- **Core Architecture**: Non-killing overlay (`"noSplashOnLaunch": true`, `"spinnerOnLaunch": true`) + OLED UI.
 - **Related Repos for Ideas**:
   - `Gathin23/cleanyourtv`: Apple TV UI aesthetics, layout & audio sound profile (`spanda`).
   - `zzeppieri/webos-custom-home`: Raw `/dev/input/event*` kernel key listening & bind-mount debloating.
