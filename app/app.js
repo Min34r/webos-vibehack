@@ -24,10 +24,48 @@
 
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
 
-  var GREETINGS = [[5, 'Chúc ngủ ngon'], [12, 'Chào buổi sáng'], [18, 'Chào buổi chiều'], [22, 'Chào buổi tối'], [24, 'Chúc ngủ ngon']];
-  var DAYS = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
-  var MONTHS = ['tháng 1', 'tháng 2', 'tháng 3', 'tháng 4', 'tháng 5', 'tháng 6', 'tháng 7', 'tháng 8', 'tháng 9',
-    'tháng 10', 'tháng 11', 'tháng 12'];
+  var curLocale = 'en';
+  var tr = (window.I18N && window.I18N.en) || {};
+
+  function setLocale(loc) {
+    if (!loc) return;
+    var i18n = window.I18N || {};
+    var code = String(loc).slice(0, 2).toLowerCase();
+    curLocale = i18n[code] ? code : 'en';
+    tr = i18n[curLocale] || i18n.en || {};
+    var elInputs = $('lblInputs');
+    if (elInputs && tr.inputs) elInputs.textContent = tr.inputs;
+    var elSettings = $('lblSettings');
+    if (elSettings && tr.settings) elSettings.textContent = tr.settings;
+    updateClock();
+    updateNetworkLabel();
+  }
+
+  function initLocale() {
+    // 0ms instant cached read from previous runs (zero IPC, zero CPU overhead)
+    var cached = null;
+    try { cached = localStorage.getItem('tvhome.locale'); } catch (e) {}
+    if (cached) {
+      setLocale(cached);
+      return;
+    }
+
+    // Instant synchronous in-memory read from Chromium
+    var lang = (typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en').slice(0, 2).toLowerCase();
+    setLocale(lang);
+    try { localStorage.setItem('tvhome.locale', lang); } catch (e) {}
+
+    // Exactly one one-shot Luna query on very first boot (no polling, no subscription)
+    luna('luna://com.webos.settingsservice/getSystemSettings', { keys: ['localeInfo'] }, function (res) {
+      if (res && res.settings && res.settings.localeInfo && res.settings.localeInfo.locales && res.settings.localeInfo.locales.UI) {
+        var tvLang = res.settings.localeInfo.locales.UI.slice(0, 2).toLowerCase();
+        if (tvLang !== lang) {
+          setLocale(tvLang);
+          try { localStorage.setItem('tvhome.locale', tvLang); } catch (e) {}
+        }
+      }
+    });
+  }
 
   var ICON_INPUT = 'M18,7V4c0,-1.1 -0.9,-2 -2,-2H8C6.9,2 6,2.9 6,4v3H5v6l3,6v3h8v-3l3,-6V7H18zM8,4h8v3h-2V5h-1v2h-2V5h-1v2H8V4z';
   var ICON_LIVETV = 'M21,6h-7.59l3.29,-3.29L16,2l-4,4l-4,-4l-0.71,0.71L10.59,6H3c-1.1,0 -2,0.89 -2,2v12c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.89 2,-2V8C23,6.89 22.1,6 21,6zM21,20H3V8h18V20zM9,10v8l7,-4L9,10z';
@@ -77,7 +115,7 @@
   function launch(id, title, params) {
     luna('luna://com.webos.applicationManager/launch', { id: id, params: params || {} }, function (res) {
       if (res.returnValue === false) {
-        toast('Could not open ' + (title || id));
+        toast((tr.couldNotOpen || 'Could not open ') + (title || id));
       } else {
         setTimeout(dismissOverlay, 150);
       }
@@ -537,23 +575,36 @@
 
   function updateClock() {
     var now = new Date(), h = now.getHours();
-    for (var k = 0; k < GREETINGS.length; k++) {
-      if (h < GREETINGS[k][0]) { $('greeting').textContent = GREETINGS[k][1]; break; }
+    var greetings = tr.greetings || [];
+    for (var k = 0; k < greetings.length; k++) {
+      if (h < greetings[k][0]) { $('greeting').textContent = greetings[k][1]; break; }
     }
     var m = now.getMinutes();
     $('clock').textContent = h + ':' + (m < 10 ? '0' : '') + m;
-    $('date').textContent = DAYS[now.getDay()] + ', ' + now.getDate() + ' ' + MONTHS[now.getMonth()];
+    var days = tr.days || [];
+    var months = tr.months || [];
+    var dayStr = days[now.getDay()] || '';
+    var monthStr = months[now.getMonth()] || '';
+    $('date').textContent = dayStr + (dayStr ? ', ' : '') + now.getDate() + ' ' + monthStr;
+  }
+
+  var lastNetState = null;
+
+  function updateNetworkLabel() {
+    if (!lastNetState) return;
+    var text = tr.wifi || 'Wi-Fi';
+    if (lastNetState.wired && lastNetState.wired.state === 'connected') text = tr.ethernet || 'Ethernet';
+    else if (lastNetState.wifi && lastNetState.wifi.state === 'connected') text = tr.wifi || 'Wi-Fi';
+    else if (lastNetState.isInternetConnectionAvailable === false) text = tr.offline || 'Offline';
+    $('wifiLabel').textContent = text;
   }
 
   /** Shows the connection type (not the network name: a long one pushes the LG button off screen). */
   function watchNetwork() {
     luna('luna://com.palm.connectionmanager/getStatus', { subscribe: true }, function (res) {
       if (res.returnValue === false && !res.wifi && !res.wired) return;
-      var text = 'Wi-Fi';
-      if (res.wired && res.wired.state === 'connected') text = 'Ethernet';
-      else if (res.wifi && res.wifi.state === 'connected') text = 'Wi-Fi';
-      else if (res.isInternetConnectionAvailable === false) text = 'Offline';
-      $('wifiLabel').textContent = text;
+      lastNetState = res;
+      updateNetworkLabel();
     });
   }
 
@@ -580,9 +631,9 @@
     inputs.forEach(function (inp) { addInputRow(ICON_INPUT, inp.label, inp.appId); });
     if (CONFIG.liveTvApp) {
       if (inputRows.length) panel.appendChild(Object.assign(document.createElement('div'), { className: 'separator' }));
-      addInputRow(ICON_LIVETV, 'Live TV', CONFIG.liveTvApp);
+      addInputRow(ICON_LIVETV, tr.liveTv || 'Live TV', CONFIG.liveTvApp);
     }
-    if (!inputRows.length) { toast('No inputs found'); return; }
+    if (!inputRows.length) { toast(tr.noInputs || 'No inputs found'); return; }
 
     // Hang right below the Inputs pill, at least as wide as it.
     var r = pageRect(pills[0]);
@@ -631,7 +682,7 @@
     it.el.classList.add('moving');
     document.body.classList.add('editing');
     sound('lift');
-    toast('Arrows to move  ·  OK to place  ·  Back to cancel');
+    toast(tr.reorderHelp || 'Arrows to move  ·  OK to place  ·  Back to cancel');
   }
 
   function moveTo(to) {
@@ -778,6 +829,7 @@
 
   applyTitles();
   build();
+  initLocale();
   updateClock();
   unpause();
   watchNetwork();

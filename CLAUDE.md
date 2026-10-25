@@ -1,17 +1,18 @@
-# WebOS Overlay Menu & Freezer Setup (New TV)
-- **Target**: New rooted LG webOS TV (root via RootMyTV/slopbro, install Homebrew Channel + SSH).
-- **Architecture**: Non-terminating overlay + SIGSTOP/SIGCONT background app hibernation + swap.
+# WebOS Overlay Menu & Setup (New TV)
+- **Target**: LG webOS TV (works Rooted via webosbrew OR Non-Rooted via Developer Mode + Quick Access).
+- **Core Architecture**: Non-killing `"defaultWindowType": "overlay"` + OLED black UI + auto-i18n (`app/i18n.js`).
 - **Related Repos for Ideas**:
-  - `Gathin23/cleanyourtv`: Apple TV UI aesthetics and minimalist home screen philosophy.
+  - `Gathin23/cleanyourtv`: Apple TV UI aesthetics, layout & audio sound profile (`spanda`).
   - `zzeppieri/webos-custom-home`: Raw `/dev/input/event*` kernel key listening & bind-mount debloating.
-  - `rorygallagher2024/glasshouse`: Root control panel, background RAM optimization, button remapping.
+  - `rorygallagher2024/glasshouse`: System optimization, background RAM tuning, button remapping.
   - `rudra-avatar/Hearth`: TV input source mapping idea and low-spec webOS hardware tuning.
-- **Step 1 - Sync**: `python3 sync-apps.py <NEW_TV_IP>` to extract installed apps & icon assets.
+- **Step 1 - Sync**: `python3 sync-apps.py <NEW_TV_IP>` to extract apps & icon graphics.
 - **Step 2 - Build**: `npx -y -p @webos-tools/cli ares-package app -o build`
-- **Step 3 - Deploy**: `./deploy-root-daemon.sh <NEW_TV_IP> install` (installs IPK, swap & autofreeze).
-- **Step 4 - Hook Key**: Install `org.webosbrew.inputhook` via HBChannel; map key 125 in `/home/root/.config/lginputhook/`.
-- **How It Works**:
-  - "defaultWindowType": "overlay" in `appinfo.json` stops SAM from killing the foreground app.
-  - `autofreeze.js` (127.0.0.1:1843) sends SIGSTOP on menu open (0% CPU), SIGCONT on Back/Esc (461/27).
-  - `80-enable-swap.sh` adds 512MB swap on `/media/internal/swapfile` to prevent LMK eviction.
-- **Verify**: `ssh root@<NEW_TV_IP> "cat /tmp/autofreeze.log && swapon -s"`
+- **Step 3 - Deploy**:
+  - *Rooted*: `./deploy-root-daemon.sh <NEW_TV_IP> install` (installs IPK & 512MB swapfile to prevent OOM).
+  - *Non-Root*: Install Dev Mode app on TV, then `ares-install -d lgtv build/*.ipk`.
+- **Step 4 - Remap Key**:
+  - *Rooted*: Install `org.webosbrew.inputhook`; bind key 125 to `com.gathin.tvhome` in config.json.
+  - *Non-Root*: Open menu, hold any number key (1–9) on remote to set Quick Access shortcut.
+- **Auto-i18n**: 0-poll cached locale (`localStorage` -> `navigator.language` -> one-shot `localeInfo`).
+- **Dismiss**: Back (461) / Esc (27) closes overlay and restores background app focus instantly.
