@@ -66,17 +66,7 @@
     }
   }
 
-  function notifyFreezer(action) {
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', 'http://127.0.0.1:1843/' + action, true);
-      xhr.timeout = 1000;
-      xhr.send();
-    } catch (e) {}
-  }
-
   function dismissOverlay() {
-    notifyFreezer('unfreeze');
     try {
       window.close();
     } catch (e) {
@@ -85,7 +75,6 @@
   }
 
   function launch(id, title, params) {
-    notifyFreezer('unfreeze');
     luna('luna://com.webos.applicationManager/launch', { id: id, params: params || {} }, function (res) {
       if (res.returnValue === false) {
         toast('Could not open ' + (title || id));
@@ -752,7 +741,6 @@
   var lastResume = 0;
 
   function resume() {
-    notifyFreezer('freeze');
     // Coming back, webOS sends visibilitychange then webOSRelaunch ~25 ms apart: act once.
     var now = Date.now();
     if (now - lastResume < 500) return;
@@ -772,7 +760,6 @@
 
   /** Behind another app: no clock ticks, and the sound engine's audio context is closed. */
   function pause() {
-    notifyFreezer('unfreeze');
     clearInterval(clockTimer);
     clockTimer = null;
     soundsOff();
@@ -790,7 +777,6 @@
   });
 
   applyTitles();
-  notifyFreezer('freeze');
   build();
   updateClock();
   unpause();
